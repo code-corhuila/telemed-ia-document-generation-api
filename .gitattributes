@@ -1,0 +1,5 @@
+# Store and check out text files with LF so Windows editors cannot turn a
+# small edit into a whole-file diff. Windows command scripts keep CRLF.
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf

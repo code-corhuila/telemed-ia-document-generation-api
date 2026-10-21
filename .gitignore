@@ -1,0 +1,18 @@
+# Build output
+target/
+
+# Environment and secrets (never versioned, Anexo I)
+.env
+.env.*
+!.env.example
+*.pem
+keys/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
