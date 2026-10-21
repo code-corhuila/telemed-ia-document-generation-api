@@ -20,3 +20,9 @@ server:
     include-message: never
     include-stacktrace: never
     include-exception: false
+
+# Numeral 5.3.9: every log line is JSON and carries the request's correlationId.
+logging:
+  structured:
+    format:
+      console: ecs
