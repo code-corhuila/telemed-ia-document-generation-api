@@ -53,6 +53,14 @@ public final class ConsultationDocument {
                 null, null, createdAt, null);
     }
 
+    /** Restores a stored document, validating every invariant. */
+    public static ConsultationDocument rehydrate(UUID id, UUID summaryId, UUID patientId,
+            DocumentStatus status, int retryCount, String storageReference, String errorMessage,
+            Instant createdAt, Instant generatedAt) {
+        return new ConsultationDocument(id, summaryId, patientId, status, retryCount,
+                storageReference, errorMessage, createdAt, generatedAt);
+    }
+
     /** {@code PENDING -> GENERATING}, or a retry {@code ERROR -> GENERATING} that counts one attempt. */
     public ConsultationDocument startGeneration() {
         requireTransitionTo(DocumentStatus.GENERATING);
