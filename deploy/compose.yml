@@ -1,0 +1,22 @@
+# Document Generation API service. telemed-ia-infra-postgres includes this file
+# in the platform composition root (Anexo G).
+# The service declares `expose`, not `ports`: only the API Gateway is
+# published to the host (Anexo G, numeral 5.6.1).
+services:
+  document-generation-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: telemed-ia/document-generation-api:dev
+    restart: unless-stopped
+    environment:
+      SERVER_PORT: "8080"
+    expose:
+      - "8080"
+    networks:
+      - platform
+
+networks:
+  platform:
+    external: true
+    name: platform
