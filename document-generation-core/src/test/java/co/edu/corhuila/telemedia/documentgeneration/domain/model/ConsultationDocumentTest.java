@@ -223,4 +223,75 @@ class ConsultationDocumentTest {
             assertThat(pending().isOwnedBy(null)).isFalse();
         }
     }
+
+    @Nested
+    class Rehydration {
+
+        @Test
+        void aConsistentStoredDocumentIsRestored() {
+            ConsultationDocument document = ConsultationDocument.rehydrate(
+                    DOCUMENT_ID, SUMMARY_ID, PATIENT_ID, DocumentStatus.AVAILABLE, 2,
+                    STORAGE_REFERENCE, null, CREATED_AT, GENERATED_AT);
+
+            assertThat(document.status()).isEqualTo(DocumentStatus.AVAILABLE);
+            assertThat(document.retryCount()).isEqualTo(2);
+            assertThat(document.storageReference()).contains(STORAGE_REFERENCE);
+        }
+
+        @Test
+        void availableRequiresStorageReferenceAndGeneratedAt() {
+            assertThatThrownBy(() -> ConsultationDocument.rehydrate(
+                    DOCUMENT_ID, SUMMARY_ID, PATIENT_ID, DocumentStatus.AVAILABLE, 0,
+                    null, null, CREATED_AT, GENERATED_AT))
+                    .isInstanceOf(BusinessRuleViolationException.class);
+            assertThatThrownBy(() -> ConsultationDocument.rehydrate(
+                    DOCUMENT_ID, SUMMARY_ID, PATIENT_ID, DocumentStatus.AVAILABLE, 0,
+                    STORAGE_REFERENCE, null, CREATED_AT, null))
+                    .isInstanceOf(BusinessRuleViolationException.class);
+        }
+
+        @Test
+        void onlyAvailableCarriesStorageReferenceOrGeneratedAt() {
+            assertThatThrownBy(() -> ConsultationDocument.rehydrate(
+                    DOCUMENT_ID, SUMMARY_ID, PATIENT_ID, DocumentStatus.PENDING, 0,
+                    STORAGE_REFERENCE, null, CREATED_AT, null))
+                    .isInstanceOf(BusinessRuleViolationException.class);
+            assertThatThrownBy(() -> ConsultationDocument.rehydrate(
+                    DOCUMENT_ID, SUMMARY_ID, PATIENT_ID, DocumentStatus.GENERATING, 0,
+                    null, null, CREATED_AT, GENERATED_AT))
+                    .isInstanceOf(BusinessRuleViolationException.class);
+        }
+
+        @Test
+        void errorRequiresAMessageAndOnlyErrorCarriesOne() {
+            assertThatThrownBy(() -> ConsultationDocument.rehydrate(
+                    DOCUMENT_ID, SUMMARY_ID, PATIENT_ID, DocumentStatus.ERROR, 0,
+                    null, null, CREATED_AT, null))
+                    .isInstanceOf(BusinessRuleViolationException.class);
+            assertThatThrownBy(() -> ConsultationDocument.rehydrate(
+                    DOCUMENT_ID, SUMMARY_ID, PATIENT_ID, DocumentStatus.PENDING, 0,
+                    null, "stale error", CREATED_AT, null))
+                    .isInstanceOf(BusinessRuleViolationException.class);
+        }
+
+        @Test
+        void retryCountMustBeBetweenZeroAndTheLimit() {
+            assertThatThrownBy(() -> ConsultationDocument.rehydrate(
+                    DOCUMENT_ID, SUMMARY_ID, PATIENT_ID, DocumentStatus.PENDING, -1,
+                    null, null, CREATED_AT, null))
+                    .isInstanceOf(BusinessRuleViolationException.class);
+            assertThatThrownBy(() -> ConsultationDocument.rehydrate(
+                    DOCUMENT_ID, SUMMARY_ID, PATIENT_ID, DocumentStatus.ERROR, ConsultationDocument.MAX_RETRIES + 1,
+                    null, "failed", CREATED_AT, null))
+                    .isInstanceOf(BusinessRuleViolationException.class);
+        }
+
+        @Test
+        void statusIsRequired() {
+            assertThatThrownBy(() -> ConsultationDocument.rehydrate(
+                    DOCUMENT_ID, SUMMARY_ID, PATIENT_ID, null, 0,
+                    null, null, CREATED_AT, null))
+                    .isInstanceOf(BusinessRuleViolationException.class);
+        }
+    }
 }
