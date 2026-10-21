@@ -34,8 +34,9 @@ class HttpConventionsTest {
     private TestRestTemplate restTemplate;
 
     @DynamicPropertySource
-    static void jwtPublicKey(DynamicPropertyRegistry registry) {
+    static void environment(DynamicPropertyRegistry registry) {
         TestJwt.register(registry);
+        TestDatabase.register(registry);
     }
 
     private ResponseEntity<Map<String, Object>> getWithTrace(String path, String trace, boolean withToken) {
