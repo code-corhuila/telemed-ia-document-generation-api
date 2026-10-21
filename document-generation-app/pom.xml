@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>co.edu.corhuila.telemedia</groupId>
+        <artifactId>document-generation-api</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>document-generation-app</artifactId>
+    <name>document-generation-app</name>
+    <description>Composition root: wires adapters to use cases and declares every limit.</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>co.edu.corhuila.telemedia</groupId>
+            <artifactId>document-generation-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>co.edu.corhuila.telemedia</groupId>
+            <artifactId>document-generation-adapters</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>document-generation-api</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
