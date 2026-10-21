@@ -20,8 +20,10 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
-/** Anexo C checks on the running service: envelope, correlation and JSON log lines. */
+/** Anexo C checks on the running service: envelope, correlation, token and JSON log lines. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ExtendWith(OutputCaptureExtension.class)
 class HttpConventionsTest {
@@ -31,16 +33,24 @@ class HttpConventionsTest {
     @Autowired
     private TestRestTemplate restTemplate;
 
-    private ResponseEntity<Map<String, Object>> getWithTrace(String path, String trace) {
+    @DynamicPropertySource
+    static void jwtPublicKey(DynamicPropertyRegistry registry) {
+        TestJwt.register(registry);
+    }
+
+    private ResponseEntity<Map<String, Object>> getWithTrace(String path, String trace, boolean withToken) {
         HttpHeaders headers = new HttpHeaders();
         headers.set(HEADER, trace);
+        if (withToken) {
+            headers.set(HttpHeaders.AUTHORIZATION, TestJwt.bearer("patient-1", "PATIENT"));
+        }
         return restTemplate.exchange(path, HttpMethod.GET, new HttpEntity<>(headers),
                 new ParameterizedTypeReference<Map<String, Object>>() { });
     }
 
     @Test
     void unknownRouteAnswers404WithTheEnvelopeAndTheReceivedTrace() {
-        ResponseEntity<Map<String, Object>> response = getWithTrace("/does-not-exist", "e2e-saga-1");
+        ResponseEntity<Map<String, Object>> response = getWithTrace("/does-not-exist", "e2e-saga-1", true);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(response.getHeaders().getFirst(HEADER)).isEqualTo("e2e-saga-1");
@@ -49,6 +59,16 @@ class HttpConventionsTest {
                 .containsEntry("traceId", "e2e-saga-1")
                 .containsKey("message")
                 .doesNotContainKey("details");
+    }
+
+    @Test
+    void aProtectedRouteWithoutTokenAnswers401WithTheEnvelope() {
+        ResponseEntity<Map<String, Object>> response = getWithTrace("/does-not-exist", "no-token-1", false);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody())
+                .containsEntry("error", "UNAUTHORIZED")
+                .containsEntry("traceId", "no-token-1");
     }
 
     @Test
@@ -61,7 +81,7 @@ class HttpConventionsTest {
 
     @Test
     void everyRequestWritesAJsonLogLineWithItsCorrelationId(CapturedOutput output) {
-        getWithTrace("/health", "log-line-check-1");
+        getWithTrace("/health", "log-line-check-1", false);
 
         // The access line is written once the response is sent, so wait for it briefly.
         await().atMost(Duration.ofSeconds(5)).untilAsserted(() -> assertThat(output.getOut().lines()
