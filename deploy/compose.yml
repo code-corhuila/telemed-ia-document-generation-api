@@ -11,6 +11,9 @@ services:
     restart: unless-stopped
     environment:
       SERVER_PORT: "8080"
+      # Public key of the identity service (numeral 5.3.7). The service does not
+      # start without it.
+      JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required}"
     expose:
       - "8080"
     networks:
