@@ -11,6 +11,8 @@ import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class DocumentGenerationApplicationTest {
@@ -20,6 +22,11 @@ class DocumentGenerationApplicationTest {
 
     @Autowired
     private Environment environment;
+
+    @DynamicPropertySource
+    static void jwtPublicKey(DynamicPropertyRegistry registry) {
+        TestJwt.register(registry);
+    }
 
     @Test
     @SuppressWarnings("rawtypes")
