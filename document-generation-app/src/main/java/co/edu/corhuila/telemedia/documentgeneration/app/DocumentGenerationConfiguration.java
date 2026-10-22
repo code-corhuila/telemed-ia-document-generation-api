@@ -12,7 +12,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcConsultationDocumentRepository;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcIdempotentDocumentStore;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.UuidGenerator;
-import co.edu.corhuila.telemedia.documentgeneration.adapter.out.storage.MinioDocumentStorage;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.storage.S3DocumentStorage;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentDownloads;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentGeneration;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentQueries;
@@ -59,17 +59,17 @@ public class DocumentGenerationConfiguration {
     }
 
     @Bean
-    MinioClient minioClient(@Value("${minio.endpoint}") String endpoint,
-            @Value("${minio.access-key}") String accessKey,
-            @Value("${minio.secret-key}") String secretKey,
-            @Value("${minio.region}") String region) {
+    MinioClient minioClient(@Value("${storage.endpoint}") String endpoint,
+            @Value("${storage.access-key}") String accessKey,
+            @Value("${storage.secret-key}") String secretKey,
+            @Value("${storage.region}") String region) {
         return MinioClient.builder().endpoint(endpoint).credentials(accessKey, secretKey).region(region).build();
     }
 
     @Bean
-    DocumentStorage documentStorage(MinioClient client, @Value("${minio.bucket}") String bucket,
-            @Value("${minio.presigned-ttl-seconds}") long timeToLiveSeconds, Clock clock) {
-        return new MinioDocumentStorage(client, bucket, Duration.ofSeconds(timeToLiveSeconds), clock);
+    DocumentStorage documentStorage(MinioClient client, @Value("${storage.bucket}") String bucket,
+            @Value("${storage.presigned-ttl-seconds}") long timeToLiveSeconds, Clock clock) {
+        return new S3DocumentStorage(client, bucket, Duration.ofSeconds(timeToLiveSeconds), clock);
     }
 
     @Bean

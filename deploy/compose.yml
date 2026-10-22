@@ -19,12 +19,12 @@ services:
       DB_USER: "${DOCUMENT_GENERATION_APP_USER:-document_generation_app}"
       DB_PASSWORD: "${DOCUMENT_GENERATION_APP_PASSWORD:?DOCUMENT_GENERATION_APP_PASSWORD is required}"
       # Object storage of the PDFs (ADR-015). Credentials come from infra secrets.
-      MINIO_ENDPOINT: "${MINIO_ENDPOINT:?MINIO_ENDPOINT is required}"
-      MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}"
-      MINIO_SECRET_KEY: "${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}"
-      MINIO_BUCKET: "${MINIO_BUCKET:-telemed-documents}"
-      MINIO_REGION: "${MINIO_REGION:-us-east-1}"
-      MINIO_PRESIGNED_TTL_SECONDS: "${MINIO_PRESIGNED_TTL_SECONDS:-300}"
+      STORAGE_ENDPOINT: "${STORAGE_ENDPOINT:?STORAGE_ENDPOINT is required}"
+      STORAGE_ACCESS_KEY: "${STORAGE_ACCESS_KEY:?STORAGE_ACCESS_KEY is required}"
+      STORAGE_SECRET_KEY: "${STORAGE_SECRET_KEY:?STORAGE_SECRET_KEY is required}"
+      STORAGE_BUCKET: "${STORAGE_BUCKET:-telemed-documents}"
+      STORAGE_REGION: "${STORAGE_REGION:-us-east-1}"
+      STORAGE_PRESIGNED_TTL_SECONDS: "${STORAGE_PRESIGNED_TTL_SECONDS:-300}"
     expose:
       - "8080"
     networks:
