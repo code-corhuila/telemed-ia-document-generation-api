@@ -24,12 +24,12 @@ import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 
 /**
- * The presigned URL against a real MinIO (Anexo C, "Integración"): the object is downloaded
+ * The presigned URL against a real S3-compatible server (Anexo C, "Integración"): the object is downloaded
  * with a plain HTTP GET and no credentials, as the browser does. Skipped, not failed, when
- * TEST_MINIO_ENDPOINT is not set. Each test removes the object it uploads.
+ * TEST_STORAGE_ENDPOINT is not set. Each test removes the object it uploads.
  */
-@EnabledIfEnvironmentVariable(named = "TEST_MINIO_ENDPOINT", matches = ".+")
-class MinioDocumentStorageIntegrationTest {
+@EnabledIfEnvironmentVariable(named = "TEST_STORAGE_ENDPOINT", matches = ".+")
+class S3DocumentStorageIntegrationTest {
 
     private static final String BUCKET = "telemed-documents";
     private static final byte[] PDF = "%PDF-1.7 integration test".getBytes(StandardCharsets.US_ASCII);
@@ -41,8 +41,8 @@ class MinioDocumentStorageIntegrationTest {
     @BeforeEach
     void upload() throws Exception {
         client = MinioClient.builder()
-                .endpoint(System.getenv("TEST_MINIO_ENDPOINT"))
-                .credentials(System.getenv("TEST_MINIO_ACCESS_KEY"), System.getenv("TEST_MINIO_SECRET_KEY"))
+                .endpoint(System.getenv("TEST_STORAGE_ENDPOINT"))
+                .credentials(System.getenv("TEST_STORAGE_ACCESS_KEY"), System.getenv("TEST_STORAGE_SECRET_KEY"))
                 .region("us-east-1")
                 .build();
         if (!client.bucketExists(BucketExistsArgs.builder().bucket(BUCKET).build())) {
@@ -66,7 +66,7 @@ class MinioDocumentStorageIntegrationTest {
 
     @Test
     void thePresignedUrlDownloadsTheObjectWithoutCredentials() throws Exception {
-        MinioDocumentStorage storage = new MinioDocumentStorage(client, BUCKET, Duration.ofMinutes(5),
+        S3DocumentStorage storage = new S3DocumentStorage(client, BUCKET, Duration.ofMinutes(5),
                 Clock.systemUTC());
 
         HttpResponse<byte[]> response = get(storage.presignDownload(key));
@@ -77,7 +77,7 @@ class MinioDocumentStorageIntegrationTest {
 
     @Test
     void anExpiredUrlIsRejectedByStorage() throws Exception {
-        MinioDocumentStorage storage = new MinioDocumentStorage(client, BUCKET, Duration.ofSeconds(1),
+        S3DocumentStorage storage = new S3DocumentStorage(client, BUCKET, Duration.ofSeconds(1),
                 Clock.systemUTC());
         DownloadLink link = storage.presignDownload(key);
 

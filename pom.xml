@@ -33,7 +33,7 @@
         <java.version>21</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
-        <!-- S3-compatible object storage client for the PDFs (ADR-015). -->
+        <!-- S3 client (MinIO Java SDK) for the object storage of the PDFs (ADR-015, ADR-021). -->
         <minio.version>8.5.17</minio.version>
     </properties>
 

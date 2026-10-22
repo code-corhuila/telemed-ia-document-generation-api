@@ -14,10 +14,10 @@ import co.edu.corhuila.telemedia.documentgeneration.application.port.in.Download
 import io.minio.MinioClient;
 
 /**
- * Presigning is computed locally with the credentials (no request to MinIO when the
+ * Presigning is computed locally with the credentials (no request to the server when the
  * region is configured), so the URL can be checked without a running server.
  */
-class MinioDocumentStorageTest {
+class S3DocumentStorageTest {
 
     private static final Instant NOW = Instant.parse("2026-10-22T15:00:00.750Z");
     private static final String KEY = "patients/ana/consultations/s-1/doc-1.pdf";
@@ -28,7 +28,7 @@ class MinioDocumentStorageTest {
             .credentials("test-access-key", SECRET)
             .region("us-east-1")
             .build();
-    private final MinioDocumentStorage storage = new MinioDocumentStorage(client, "telemed-documents",
+    private final S3DocumentStorage storage = new S3DocumentStorage(client, "telemed-documents",
             Duration.ofMinutes(5), Clock.fixed(NOW, ZoneOffset.UTC));
 
     @Test
@@ -60,11 +60,11 @@ class MinioDocumentStorageTest {
     @Test
     void theTimeToLiveMustBeBetweenOneSecondAndSevenDays() {
         Clock clock = Clock.systemUTC();
-        assertThatThrownBy(() -> new MinioDocumentStorage(client, "telemed-documents", Duration.ZERO, clock))
+        assertThatThrownBy(() -> new S3DocumentStorage(client, "telemed-documents", Duration.ZERO, clock))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new MinioDocumentStorage(client, "telemed-documents", Duration.ofDays(8), clock))
+        assertThatThrownBy(() -> new S3DocumentStorage(client, "telemed-documents", Duration.ofDays(8), clock))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new MinioDocumentStorage(client, " ", Duration.ofMinutes(5), clock))
+        assertThatThrownBy(() -> new S3DocumentStorage(client, " ", Duration.ofMinutes(5), clock))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

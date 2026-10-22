@@ -37,7 +37,7 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- Outbound object storage: presigned download URLs on MinIO (ADR-015). -->
+        <!-- Outbound object storage: presigned download URLs, S3 protocol (ADR-021). -->
         <dependency>
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>

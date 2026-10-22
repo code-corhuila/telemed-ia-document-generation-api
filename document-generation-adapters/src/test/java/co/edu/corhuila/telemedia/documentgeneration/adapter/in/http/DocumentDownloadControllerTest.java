@@ -106,7 +106,7 @@ class DocumentDownloadControllerTest {
 
     @Test
     void anUnavailableStorageIs503WithoutInternalDetail() throws Exception {
-        downloads.failure = new StorageUnavailableException("minio:9000 refused", new RuntimeException());
+        downloads.failure = new StorageUnavailableException("storage refused", new RuntimeException());
 
         download(DOCUMENT.toString())
                 .andExpect(status().isServiceUnavailable())

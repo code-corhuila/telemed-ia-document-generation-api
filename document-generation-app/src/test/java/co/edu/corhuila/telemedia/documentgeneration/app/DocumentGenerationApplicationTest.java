@@ -18,7 +18,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcConsultationDocumentRepository;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcIdempotentDocumentStore;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.UuidGenerator;
-import co.edu.corhuila.telemedia.documentgeneration.adapter.out.storage.MinioDocumentStorage;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.storage.S3DocumentStorage;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentDownloads;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentGeneration;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentQueries;
@@ -83,14 +83,14 @@ class DocumentGenerationApplicationTest {
         assertThat(context.getBean(IdempotentDocumentStore.class)).isInstanceOf(JdbcIdempotentDocumentStore.class);
         assertThat(context.getBean(IdGenerator.class)).isInstanceOf(UuidGenerator.class);
         assertThat(context.getBean(DocumentGeneration.class)).isInstanceOf(DocumentGenerationService.class);
-        assertThat(context.getBean(DocumentStorage.class)).isInstanceOf(MinioDocumentStorage.class);
+        assertThat(context.getBean(DocumentStorage.class)).isInstanceOf(S3DocumentStorage.class);
         assertThat(context.getBean(DocumentDownloads.class)).isInstanceOf(DocumentDownloadService.class);
     }
 
     @Test
     void storageSettingsFollowAdr015() {
-        assertThat(environment.getProperty("minio.bucket")).isEqualTo("telemed-documents");
-        assertThat(environment.getProperty("minio.region")).isEqualTo("us-east-1");
-        assertThat(environment.getProperty("minio.presigned-ttl-seconds")).isEqualTo("300");
+        assertThat(environment.getProperty("storage.bucket")).isEqualTo("telemed-documents");
+        assertThat(environment.getProperty("storage.region")).isEqualTo("us-east-1");
+        assertThat(environment.getProperty("storage.presigned-ttl-seconds")).isEqualTo("300");
     }
 }

@@ -3,9 +3,9 @@ package co.edu.corhuila.telemedia.documentgeneration.app;
 import org.springframework.test.context.DynamicPropertyRegistry;
 
 /**
- * The application requires the MinIO endpoint and credentials to start (ADR-015). Signing
+ * The application requires the storage endpoint and credentials to start (ADR-021). Signing
  * a URL needs no running server, so test values are enough for these context tests; the
- * real round trip lives in MinioDocumentStorageIntegrationTest.
+ * real round trip lives in S3DocumentStorageIntegrationTest.
  */
 final class TestStorage {
 
@@ -13,8 +13,8 @@ final class TestStorage {
     }
 
     static void register(DynamicPropertyRegistry registry) {
-        registry.add("MINIO_ENDPOINT", () -> "http://localhost:9000");
-        registry.add("MINIO_ACCESS_KEY", () -> "context-test-access-key");
-        registry.add("MINIO_SECRET_KEY", () -> "context-test-secret-key");
+        registry.add("STORAGE_ENDPOINT", () -> "http://localhost:9000");
+        registry.add("STORAGE_ACCESS_KEY", () -> "context-test-access-key");
+        registry.add("STORAGE_SECRET_KEY", () -> "context-test-secret-key");
     }
 }
