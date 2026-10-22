@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.http.ApiError.FieldDetail;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentAccessDeniedException;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.DocumentNotFoundException;
 import co.edu.corhuila.telemedia.documentgeneration.domain.model.BusinessRuleViolationException;
 import co.edu.corhuila.telemedia.documentgeneration.domain.model.InvalidStatusTransitionException;
 
@@ -62,6 +64,22 @@ public class ErrorHandler {
     ResponseEntity<ApiError> unreadableBody(HttpMessageNotReadableException ex, HttpServletRequest request) {
         return respond(400, ApiError.of(ApiError.VALIDATION_ERROR,
                 "the request body is not valid JSON", trace(request)));
+    }
+
+    @ExceptionHandler(InvalidRequestException.class)
+    ResponseEntity<ApiError> invalidRequest(InvalidRequestException ex, HttpServletRequest request) {
+        return respond(400, ApiError.invalid(ex.details(), trace(request)));
+    }
+
+    /** DEC-004: the same 403 for a non-patient and for another patient's document. */
+    @ExceptionHandler(DocumentAccessDeniedException.class)
+    ResponseEntity<ApiError> accessDenied(DocumentAccessDeniedException ex, HttpServletRequest request) {
+        return respond(403, ApiError.forStatus(403, trace(request)));
+    }
+
+    @ExceptionHandler(DocumentNotFoundException.class)
+    ResponseEntity<ApiError> notFound(DocumentNotFoundException ex, HttpServletRequest request) {
+        return respond(404, ApiError.forStatus(404, trace(request)));
     }
 
     @ExceptionHandler(InvalidStatusTransitionException.class)
