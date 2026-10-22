@@ -38,6 +38,7 @@ class GenerateRouteTest {
     static void environment(DynamicPropertyRegistry registry) {
         TestJwt.register(registry);
         TestDatabase.register(registry);
+        TestStorage.register(registry);
     }
 
     private ResponseEntity<Map<String, Object>> generate(String role, String body) {
