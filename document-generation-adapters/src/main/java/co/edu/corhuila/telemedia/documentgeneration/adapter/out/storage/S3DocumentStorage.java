@@ -18,13 +18,14 @@ import io.minio.errors.MinioException;
 import io.minio.http.Method;
 
 /**
- * PDFs live in one MinIO bucket and are downloaded by the browser through a presigned GET
- * URL (ADR-015). With the region configured on the client, signing is computed locally.
+ * PDFs live in one bucket of S3-compatible object storage (ADR-021) and are downloaded by
+ * the browser through a presigned GET URL (ADR-015). The client is the MinIO Java SDK used
+ * as a generic S3 client. With the region configured, signing is computed locally.
  *
  * <p>{@code expiresAt} is taken before signing and truncated to the second, so it is never
  * later than the real expiry of the URL.
  */
-public final class MinioDocumentStorage implements DocumentStorage {
+public final class S3DocumentStorage implements DocumentStorage {
 
     /** S3 limit for presigned URLs. */
     static final Duration MAX_TIME_TO_LIVE = Duration.ofDays(7);
@@ -34,7 +35,7 @@ public final class MinioDocumentStorage implements DocumentStorage {
     private final Duration timeToLive;
     private final Clock clock;
 
-    public MinioDocumentStorage(MinioClient client, String bucket, Duration timeToLive, Clock clock) {
+    public S3DocumentStorage(MinioClient client, String bucket, Duration timeToLive, Clock clock) {
         this.client = Objects.requireNonNull(client, "client");
         this.bucket = Objects.requireNonNull(bucket, "bucket");
         this.timeToLive = Objects.requireNonNull(timeToLive, "timeToLive");
