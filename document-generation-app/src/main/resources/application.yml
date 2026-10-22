@@ -25,7 +25,10 @@ spring:
 # downloaded through presigned URLs.
 # STORAGE_ENDPOINT, STORAGE_ACCESS_KEY and STORAGE_SECRET_KEY are required.
 storage:
+  # Internal endpoint, for storage operations.
   endpoint: ${STORAGE_ENDPOINT}
+  # Endpoint the browser reaches; download URLs are signed for it (ADR-021).
+  public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:${STORAGE_ENDPOINT}}
   access-key: ${STORAGE_ACCESS_KEY}
   secret-key: ${STORAGE_SECRET_KEY}
   bucket: ${STORAGE_BUCKET:telemed-documents}
