@@ -18,6 +18,13 @@ services:
       DB_URL: "jdbc:postgresql://postgres:5432/${PG_DATABASE:-telemed_ia}"
       DB_USER: "${DOCUMENT_GENERATION_APP_USER:-document_generation_app}"
       DB_PASSWORD: "${DOCUMENT_GENERATION_APP_PASSWORD:?DOCUMENT_GENERATION_APP_PASSWORD is required}"
+      # Object storage of the PDFs (ADR-015). Credentials come from infra secrets.
+      MINIO_ENDPOINT: "${MINIO_ENDPOINT:?MINIO_ENDPOINT is required}"
+      MINIO_ACCESS_KEY: "${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is required}"
+      MINIO_SECRET_KEY: "${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is required}"
+      MINIO_BUCKET: "${MINIO_BUCKET:-telemed-documents}"
+      MINIO_REGION: "${MINIO_REGION:-us-east-1}"
+      MINIO_PRESIGNED_TTL_SECONDS: "${MINIO_PRESIGNED_TTL_SECONDS:-300}"
     expose:
       - "8080"
     networks:
