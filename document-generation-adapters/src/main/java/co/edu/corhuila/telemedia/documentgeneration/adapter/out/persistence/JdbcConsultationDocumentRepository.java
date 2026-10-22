@@ -50,6 +50,13 @@ public final class JdbcConsultationDocumentRepository implements ConsultationDoc
         return rows.stream().findFirst();
     }
 
+    /** The document of a summary, if any: the schema allows one per summary. */
+    public Optional<ConsultationDocument> findBySummaryId(UUID summaryId) {
+        List<ConsultationDocument> rows = jdbc.query(SELECT + " WHERE summary_id = :summaryId",
+                new MapSqlParameterSource("summaryId", summaryId), ROW);
+        return rows.stream().findFirst();
+    }
+
     @Override
     public Page<ConsultationDocument> findByPatient(UUID patientId, Optional<DocumentStatus> status,
             PageRequest page) {
