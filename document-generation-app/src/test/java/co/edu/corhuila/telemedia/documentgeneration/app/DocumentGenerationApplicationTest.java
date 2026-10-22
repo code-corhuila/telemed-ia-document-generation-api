@@ -93,4 +93,16 @@ class DocumentGenerationApplicationTest {
         assertThat(environment.getProperty("storage.region")).isEqualTo("us-east-1");
         assertThat(environment.getProperty("storage.presigned-ttl-seconds")).isEqualTo("300");
     }
+
+    @Test
+    void withoutAPublicEndpointUrlsAreSignedForTheInternalOne() {
+        assertThat(environment.getProperty("storage.public-endpoint")).isEqualTo("http://localhost:9000");
+    }
+
+    @Test
+    void theBucketIsEnsuredAtStartupWithoutBlockingIt() {
+        // The storage of these tests is not running: the context still starts (ADR-015:
+        // storage being down affects downloads only).
+        assertThat(context.containsBean("ensureStorageBucket")).isTrue();
+    }
 }

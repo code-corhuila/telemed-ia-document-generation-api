@@ -11,6 +11,7 @@ import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DownloadLink;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.StorageUnavailableException;
 import io.minio.MinioClient;
 
 /**
@@ -23,13 +24,25 @@ class S3DocumentStorageTest {
     private static final String KEY = "patients/ana/consultations/s-1/doc-1.pdf";
     private static final String SECRET = "test-secret-key-0001";
 
-    private final MinioClient client = MinioClient.builder()
-            .endpoint("http://localhost:9000")
-            .credentials("test-access-key", SECRET)
-            .region("us-east-1")
-            .build();
-    private final S3DocumentStorage storage = new S3DocumentStorage(client, "telemed-documents",
+    /** Internal endpoint, as the service reaches the server inside the platform network. */
+    private final MinioClient client = client("http://object-storage:9000");
+    /** Public endpoint, as the browser reaches the server: only used to sign. */
+    private final MinioClient signer = client("http://localhost:9000");
+    private final S3DocumentStorage storage = new S3DocumentStorage(client, signer, "telemed-documents",
             Duration.ofMinutes(5), Clock.fixed(NOW, ZoneOffset.UTC));
+
+    private static MinioClient client(String endpoint) {
+        return MinioClient.builder()
+                .endpoint(endpoint)
+                .credentials("test-access-key", SECRET)
+                .region("us-east-1")
+                .build();
+    }
+
+    @Test
+    void theUrlIsSignedForThePublicEndpointNotTheInternalOne() {
+        assertThat(storage.presignDownload(KEY).url().getHost()).isEqualTo("localhost").isNotEqualTo("object-storage");
+    }
 
     @Test
     void theUrlPointsToTheObjectAndIsSignedForFiveMinutes() {
@@ -58,13 +71,21 @@ class S3DocumentStorageTest {
     }
 
     @Test
+    void anUnreachableServerWhileEnsuringTheBucketIsStorageUnavailable() {
+        S3DocumentStorage unreachable = new S3DocumentStorage(client("http://127.0.0.1:1"), signer,
+                "telemed-documents", Duration.ofMinutes(5), Clock.systemUTC());
+
+        assertThatThrownBy(unreachable::ensureBucket).isInstanceOf(StorageUnavailableException.class);
+    }
+
+    @Test
     void theTimeToLiveMustBeBetweenOneSecondAndSevenDays() {
         Clock clock = Clock.systemUTC();
-        assertThatThrownBy(() -> new S3DocumentStorage(client, "telemed-documents", Duration.ZERO, clock))
+        assertThatThrownBy(() -> new S3DocumentStorage(client, signer, "telemed-documents", Duration.ZERO, clock))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new S3DocumentStorage(client, "telemed-documents", Duration.ofDays(8), clock))
+        assertThatThrownBy(() -> new S3DocumentStorage(client, signer, "telemed-documents", Duration.ofDays(8), clock))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new S3DocumentStorage(client, " ", Duration.ofMinutes(5), clock))
+        assertThatThrownBy(() -> new S3DocumentStorage(client, signer, " ", Duration.ofMinutes(5), clock))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }
