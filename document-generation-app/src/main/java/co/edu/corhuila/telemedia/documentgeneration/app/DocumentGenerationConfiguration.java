@@ -1,12 +1,21 @@
 package co.edu.corhuila.telemedia.documentgeneration.app;
 
+import java.time.Clock;
+
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcConsultationDocumentRepository;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcIdempotentDocumentStore;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.UuidGenerator;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentGeneration;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentQueries;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationDocumentRepository;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.IdGenerator;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.IdempotentDocumentStore;
+import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentGenerationService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentQueryService;
 
 /**
@@ -22,7 +31,23 @@ public class DocumentGenerationConfiguration {
     }
 
     @Bean
+    IdempotentDocumentStore idempotentDocumentStore(NamedParameterJdbcTemplate jdbc,
+            PlatformTransactionManager transactions) {
+        return new JdbcIdempotentDocumentStore(jdbc, transactions);
+    }
+
+    @Bean
+    IdGenerator idGenerator() {
+        return new UuidGenerator();
+    }
+
+    @Bean
     DocumentQueries documentQueries(ConsultationDocumentRepository repository) {
         return new DocumentQueryService(repository);
+    }
+
+    @Bean
+    DocumentGeneration documentGeneration(IdempotentDocumentStore store, IdGenerator ids, Clock clock) {
+        return new DocumentGenerationService(store, ids, clock);
     }
 }
