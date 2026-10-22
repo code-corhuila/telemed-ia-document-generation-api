@@ -20,6 +20,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.http.ApiError.FieldDetail;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentAccessDeniedException;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.DocumentNotFoundException;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.StorageUnavailableException;
 import co.edu.corhuila.telemedia.documentgeneration.domain.model.BusinessRuleViolationException;
 import co.edu.corhuila.telemedia.documentgeneration.domain.model.InvalidStatusTransitionException;
 
@@ -90,6 +91,13 @@ public class ErrorHandler {
     @ExceptionHandler(BusinessRuleViolationException.class)
     ResponseEntity<ApiError> ruleViolation(BusinessRuleViolationException ex, HttpServletRequest request) {
         return respond(422, ApiError.of(ApiError.BUSINESS_RULE_VIOLATION, ex.getMessage(), trace(request)));
+    }
+
+    /** ADR-015: storage being down affects downloads only; the cause goes to the log. */
+    @ExceptionHandler(StorageUnavailableException.class)
+    ResponseEntity<ApiError> storageUnavailable(StorageUnavailableException ex, HttpServletRequest request) {
+        LOG.warn("object storage unavailable on {} {}", request.getMethod(), request.getRequestURI(), ex);
+        return respond(503, ApiError.forStatus(503, trace(request)));
     }
 
     /** Framework errors that already carry a status: unknown route, method, media type. */
