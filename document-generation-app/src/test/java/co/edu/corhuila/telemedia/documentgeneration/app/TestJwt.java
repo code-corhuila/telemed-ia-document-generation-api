@@ -28,8 +28,18 @@ final class TestJwt {
 
     static String bearer(String subject, String role) {
         long exp = Instant.now().getEpochSecond() + 3600;
+        return sign("{\"sub\":\"" + subject + "\",\"roles\":[\"" + role + "\"],\"exp\":" + exp + "}");
+    }
+
+    /** The token shape issued by the identity service: {@code iss} and a single {@code role} string. */
+    static String identityBearer(String subject, String role) {
+        long exp = Instant.now().getEpochSecond() + 3600;
+        return sign("{\"iss\":\"telemed-ia-identity-and-access\",\"sub\":\"" + subject
+                + "\",\"role\":\"" + role + "\",\"exp\":" + exp + "}");
+    }
+
+    private static String sign(String payload) {
         String header = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
-        String payload = "{\"sub\":\"" + subject + "\",\"roles\":[\"" + role + "\"],\"exp\":" + exp + "}";
         String signingInput = encode(header) + "." + encode(payload);
         try {
             Signature signature = Signature.getInstance("SHA256withRSA");
