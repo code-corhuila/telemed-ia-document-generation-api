@@ -16,7 +16,7 @@ patient authorized access to their own documents (HU-016).
 | Database | schema `document_generation`, owned by `telemed-ia-document-generation-db` |
 | Database user | `document_generation_app` (never the administrator, Anexo J.7) |
 | Consumes / publishes | `PostConsultationSummaryGenerated` / `ConsultationPdfGenerated` |
-| Binary storage | MinIO (ADR-015) |
+| Binary storage | S3-compatible object storage, RustFS (ADR-015, ADR-021) |
 
 This repository contains **no migrations**: the schema lives only in the `-db` repository
 (numeral 5.2.1).
