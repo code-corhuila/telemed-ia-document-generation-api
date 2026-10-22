@@ -42,6 +42,33 @@ class Rs256VerifierTest {
     }
 
     @Test
+    void theSingleRoleClaimIssuedByTheIdentityServiceIsAccepted() {
+        AuthenticatedUser user = verifier.verify(TestTokens.rs256("{\"iss\":\"telemed-ia-identity-and-access\",\"sub\":\""
+                + SUBJECT + "\",\"role\":\"ADMIN\",\"exp\":" + (NOW + 60) + "}"));
+
+        assertThat(user.roles()).containsExactly("ADMIN");
+        assertThat(user.hasRole("ADMIN")).isTrue();
+    }
+
+    @Test
+    void roleAndRolesAreMerged() {
+        AuthenticatedUser user = verifier.verify(TestTokens.rs256("{\"sub\":\"u-1\",\"role\":\"ADMIN\","
+                + "\"roles\":[\"PATIENT\"],\"exp\":" + (NOW + 60) + "}"));
+
+        assertThat(user.roles()).containsExactlyInAnyOrder("ADMIN", "PATIENT");
+    }
+
+    @Test
+    void aRoleClaimThatIsNotANonBlankStringGrantsNothing() {
+        assertThat(verifier.verify(TestTokens.rs256("{\"sub\":\"u-1\",\"role\":[\"ADMIN\"],\"exp\":" + (NOW + 60) + "}"))
+                .roles()).isEmpty();
+        assertThat(verifier.verify(TestTokens.rs256("{\"sub\":\"u-1\",\"role\":7,\"exp\":" + (NOW + 60) + "}"))
+                .roles()).isEmpty();
+        assertThat(verifier.verify(TestTokens.rs256("{\"sub\":\"u-1\",\"role\":\" \",\"exp\":" + (NOW + 60) + "}"))
+                .roles()).isEmpty();
+    }
+
+    @Test
     void algNoneIsRejected() {
         assertRejected(TestTokens.unsigned(payload(NOW + 3600)));
     }
