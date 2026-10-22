@@ -7,6 +7,19 @@ spring:
   lifecycle:
     # Graceful shutdown budget.
     timeout-per-shutdown-phase: 20s
+  datasource:
+    # Anexo J: the shared instance, with the domain's own application user
+    # (never the administrator). DB_URL and DB_PASSWORD are required.
+    url: ${DB_URL}
+    username: ${DB_USER:document_generation_app}
+    password: ${DB_PASSWORD}
+    hikari:
+      # Pool size.
+      maximum-pool-size: 10
+      # Maximum wait for a free connection, in milliseconds.
+      connection-timeout: 5000
+      # Maximum time per statement.
+      connection-init-sql: SET statement_timeout = '5s'
 
 server:
   port: ${SERVER_PORT:8080}
