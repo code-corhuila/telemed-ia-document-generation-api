@@ -28,6 +28,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
  *       {@code HS256} signed with the public key as secret are rejected.</li>
  *   <li>RSA PKCS#1 v1.5 SHA-256 signature of {@code header.payload} with the public key.</li>
  *   <li>{@code exp} is required and not past (30 s of clock skew); {@code sub} is required.</li>
+ *   <li>Roles come from the {@code role} string and/or the {@code roles} array.</li>
  * </ol>
  *
  * The service only holds the public key; it never signs tokens.
@@ -98,7 +99,7 @@ public final class Rs256Verifier {
         if (sub == null || !sub.isTextual() || sub.asText().isBlank()) {
             throw new InvalidTokenException("sub is required");
         }
-        return new AuthenticatedUser(sub.asText(), roles(payload.get("roles")));
+        return new AuthenticatedUser(sub.asText(), roles(payload.get("role"), payload.get("roles")));
     }
 
     private boolean signatureMatches(String[] parts) {
@@ -132,16 +133,23 @@ public final class Rs256Verifier {
         }
     }
 
-    private static Set<String> roles(JsonNode node) {
+    /**
+     * The identity service issues a single {@code role} string; a {@code roles} array is also
+     * accepted. Both are merged; any value that is not a non-blank string grants nothing.
+     */
+    private static Set<String> roles(JsonNode role, JsonNode roleList) {
         Set<String> roles = new HashSet<>();
-        if (node != null && node.isArray()) {
-            node.forEach(role -> {
-                if (role.isTextual()) {
-                    roles.add(role.asText());
-                }
-            });
+        addRole(roles, role);
+        if (roleList != null && roleList.isArray()) {
+            roleList.forEach(item -> addRole(roles, item));
         }
         return roles;
+    }
+
+    private static void addRole(Set<String> roles, JsonNode node) {
+        if (node != null && node.isTextual() && !node.asText().isBlank()) {
+            roles.add(node.asText());
+        }
     }
 
     /** The token cannot be trusted; the reason is logged, never returned to the client. */
