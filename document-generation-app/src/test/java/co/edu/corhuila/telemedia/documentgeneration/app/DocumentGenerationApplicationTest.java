@@ -16,8 +16,14 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcConsultationDocumentRepository;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcIdempotentDocumentStore;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.UuidGenerator;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentGeneration;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentQueries;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationDocumentRepository;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.IdGenerator;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.IdempotentDocumentStore;
+import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentGenerationService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentQueryService;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -69,5 +75,8 @@ class DocumentGenerationApplicationTest {
         assertThat(context.getBean(ConsultationDocumentRepository.class))
                 .isInstanceOf(JdbcConsultationDocumentRepository.class);
         assertThat(context.getBean(DocumentQueries.class)).isInstanceOf(DocumentQueryService.class);
+        assertThat(context.getBean(IdempotentDocumentStore.class)).isInstanceOf(JdbcIdempotentDocumentStore.class);
+        assertThat(context.getBean(IdGenerator.class)).isInstanceOf(UuidGenerator.class);
+        assertThat(context.getBean(DocumentGeneration.class)).isInstanceOf(DocumentGenerationService.class);
     }
 }
