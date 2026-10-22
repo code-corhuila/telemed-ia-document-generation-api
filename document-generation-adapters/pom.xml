@@ -37,6 +37,11 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Outbound object storage: presigned download URLs on MinIO (ADR-015). -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
