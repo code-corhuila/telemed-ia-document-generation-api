@@ -14,6 +14,10 @@ services:
       # Public key of the identity service (numeral 5.3.7). The service does not
       # start without it.
       JWT_PUBLIC_KEY: "${JWT_PUBLIC_KEY:?JWT_PUBLIC_KEY is required}"
+      # Shared PostgreSQL instance (Anexo J), with the domain's application user.
+      DB_URL: "jdbc:postgresql://postgres:5432/${PG_DATABASE:-telemed_ia}"
+      DB_USER: "${DOCUMENT_GENERATION_APP_USER:-document_generation_app}"
+      DB_PASSWORD: "${DOCUMENT_GENERATION_APP_PASSWORD:?DOCUMENT_GENERATION_APP_PASSWORD is required}"
     expose:
       - "8080"
     networks:
