@@ -17,6 +17,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 final class TestJwt {
 
     private static final KeyPair KEYS = newKeyPair();
+    private static final KeyPair FOREIGN_KEYS = newKeyPair();
     private static final Base64.Encoder B64URL = Base64.getUrlEncoder().withoutPadding();
 
     private TestJwt() {
@@ -38,12 +39,35 @@ final class TestJwt {
                 + "\",\"role\":\"" + role + "\",\"exp\":" + exp + "}");
     }
 
+    /** Anexo C 5.3.12: a well-formed token that expired an hour ago. */
+    static String expiredBearer(String subject, String role) {
+        long exp = Instant.now().getEpochSecond() - 3600;
+        return sign("{\"sub\":\"" + subject + "\",\"role\":\"" + role + "\",\"exp\":" + exp + "}");
+    }
+
+    /** Anexo C 5.3.12: a token signed with a key that is not the identity service's. */
+    static String foreignKeyBearer(String subject, String role) {
+        long exp = Instant.now().getEpochSecond() + 3600;
+        return sign("{\"alg\":\"RS256\",\"typ\":\"JWT\"}",
+                "{\"sub\":\"" + subject + "\",\"role\":\"" + role + "\",\"exp\":" + exp + "}", FOREIGN_KEYS);
+    }
+
+    /** Anexo C 5.3.12: a token that declares another algorithm ({@code none}, {@code HS256}). */
+    static String bearerWithAlgorithm(String algorithm, String subject, String role) {
+        long exp = Instant.now().getEpochSecond() + 3600;
+        return sign("{\"alg\":\"" + algorithm + "\",\"typ\":\"JWT\"}",
+                "{\"sub\":\"" + subject + "\",\"role\":\"" + role + "\",\"exp\":" + exp + "}", KEYS);
+    }
+
     private static String sign(String payload) {
-        String header = "{\"alg\":\"RS256\",\"typ\":\"JWT\"}";
+        return sign("{\"alg\":\"RS256\",\"typ\":\"JWT\"}", payload, KEYS);
+    }
+
+    private static String sign(String header, String payload, KeyPair keys) {
         String signingInput = encode(header) + "." + encode(payload);
         try {
             Signature signature = Signature.getInstance("SHA256withRSA");
-            signature.initSign(KEYS.getPrivate());
+            signature.initSign(keys.getPrivate());
             signature.update(signingInput.getBytes(StandardCharsets.US_ASCII));
             return "Bearer " + signingInput + "." + B64URL.encodeToString(signature.sign());
         } catch (GeneralSecurityException e) {
