@@ -13,6 +13,8 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
+import org.slf4j.event.Level;
+import org.slf4j.spi.LoggingEventBuilder;
 
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.http.CorrelationFilter;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentPdfGeneration;
@@ -33,6 +35,9 @@ import io.micrometer.tracing.Tracer;
  *       that threw), each run with its own correlation id (norma 5.7.3).</li>
  *   <li>each attempt is a span; one submitted during a request is a child of the request's
  *       span, so the whole generation shows in one trace (OBS-DG-02).</li>
+ *   <li>each attempt logs its start and its outcome as domain events, with the fields of the
+ *       log contract: {@code event}, {@code document_id}, {@code status}, {@code duration_ms}
+ *       and the {@code attempt} number; never clinical content (OBS-DG-03).</li>
  * </ul>
  * Waiting retries live in memory only: after a restart the sweep finds them again.
  */
@@ -121,27 +126,60 @@ public final class BackgroundPdfGenerator implements PdfGenerationQueue {
         Span span = (parent == null ? tracer.nextSpan() : tracer.nextSpan(parent)).name(SPAN_NAME)
                 .tag("document.id", documentId.toString()).start();
         MDC.put(CorrelationFilter.MDC_KEY, correlationId);
+        int number = retries + 1;
+        long start = System.nanoTime();
         try (Tracer.SpanInScope scope = tracer.withSpan(span)) {
+            event(Level.INFO, "document.generation.started", documentId, number).addKeyValue("status", "GENERATING")
+                    .log("PDF generation attempt {} of document {} started", number, documentId);
             GenerationAttempt outcome = generation.generate(documentId, correlationId);
             span.tag("outcome", outcome.name().toLowerCase(Locale.ROOT));
+            logOutcome(outcome, documentId, number, start);
             if (outcome == GenerationAttempt.RETRY) {
                 int retry = retries + 1;
                 scheduler.schedule(() -> attempt(documentId, correlationId, retry, parent), backoff(retry));
                 return;
             }
-            if (outcome == GenerationAttempt.FAILED) {
-                LOG.warn("PDF generation of document {} failed with no retry left", documentId);
-            }
             inFlight.remove(documentId);
         } catch (RuntimeException e) {
             // The document keeps its stored state; the next sweep resumes it.
             span.error(e);
-            LOG.error("PDF generation attempt of document {} stopped unexpectedly", documentId, e);
+            event(Level.ERROR, "document.generation.interrupted", documentId, number)
+                    .addKeyValue("duration_ms", elapsedMillis(start)).setCause(e)
+                    .log("PDF generation attempt {} of document {} stopped unexpectedly", number, documentId);
             inFlight.remove(documentId);
         } finally {
             span.end();
             MDC.remove(CorrelationFilter.MDC_KEY);
         }
+    }
+
+    private static void logOutcome(GenerationAttempt outcome, UUID documentId, int number, long start) {
+        long duration = elapsedMillis(start);
+        switch (outcome) {
+            case AVAILABLE -> event(Level.INFO, "document.generation.available", documentId, number)
+                    .addKeyValue("status", "AVAILABLE").addKeyValue("duration_ms", duration)
+                    .log("PDF of document {} is available", documentId);
+            case RETRY -> event(Level.INFO, "document.generation.retry_scheduled", documentId, number)
+                    .addKeyValue("status", "ERROR").addKeyValue("duration_ms", duration)
+                    .log("PDF generation attempt {} of document {} failed; it is retried", number, documentId);
+            case FAILED -> event(Level.WARN, "document.generation.failed", documentId, number)
+                    .addKeyValue("status", "ERROR").addKeyValue("duration_ms", duration)
+                    .log("PDF generation of document {} failed with no retry left", documentId);
+            // The document was no longer waiting for its PDF: its status is not known here.
+            case SKIPPED -> event(Level.INFO, "document.generation.skipped", documentId, number)
+                    .addKeyValue("duration_ms", duration)
+                    .log("PDF generation of document {} was not needed", documentId);
+        }
+    }
+
+    /** A log line of the log contract: only identifiers, state and timing. */
+    private static LoggingEventBuilder event(Level level, String name, UUID documentId, int number) {
+        return LOG.atLevel(level).addKeyValue("event", name).addKeyValue("document_id", documentId.toString())
+                .addKeyValue("attempt", number);
+    }
+
+    private static long elapsedMillis(long start) {
+        return (System.nanoTime() - start) / 1_000_000;
     }
 
     /** Full jitter: a random wait between zero and the capped exponential backoff. */
