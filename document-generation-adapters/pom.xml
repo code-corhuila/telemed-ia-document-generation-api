@@ -42,6 +42,11 @@
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
         </dependency>
+        <!-- Generation metrics (NFR-005); the registry and its endpoint live in the app. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
         <!-- Outbound PDF rendering (DEC-006). spring-jcl already provides the logging API. -->
         <dependency>
             <groupId>org.apache.pdfbox</groupId>
