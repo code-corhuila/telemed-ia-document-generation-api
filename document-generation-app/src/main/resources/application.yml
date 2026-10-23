@@ -96,14 +96,15 @@ server:
 
 # NFR-005: metrics for the Prometheus of telemed-ia-infra-postgres. They are served on
 # their own port, inside the platform network only: never published, never routed by
-# the gateway, so the scrape needs no token.
+# the gateway, so the scrape needs no token. The same port carries the pause switch of
+# PDF generation (OBS-DG-06, /actuator/generation).
 management:
   server:
     port: ${MANAGEMENT_PORT:9081}
   endpoints:
     web:
       exposure:
-        include: health,prometheus
+        include: health,prometheus,generation
   metrics:
     tags:
       application: ${spring.application.name}

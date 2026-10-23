@@ -210,6 +210,19 @@ public class DocumentGenerationConfiguration {
                 .register(registry);
     }
 
+    /** OBS-DG-06: 1 while PDF generation is paused, so a forgotten pause shows on the dashboard. */
+    @Bean
+    Gauge pdfGenerationPaused(BackgroundPdfGenerator generator, MeterRegistry registry) {
+        return Gauge.builder("document.generation.paused", generator, g -> g.isPaused() ? 1 : 0)
+                .description("1 while PDF generation is paused")
+                .register(registry);
+    }
+
+    @Bean
+    GenerationPauseEndpoint generationPauseEndpoint(BackgroundPdfGenerator generator) {
+        return new GenerationPauseEndpoint(generator);
+    }
+
     /** DEC-006: documents a restart left behind are resumed from startup on. */
     @Bean
     ApplicationRunner startBackgroundGeneration(BackgroundPdfGenerator generator,
