@@ -53,6 +53,13 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Anexo C 5.3.12: responses checked against the published OpenAPI contract. -->
+        <dependency>
+            <groupId>com.atlassian.oai</groupId>
+            <artifactId>swagger-request-validator-core</artifactId>
+            <version>2.44.1</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
