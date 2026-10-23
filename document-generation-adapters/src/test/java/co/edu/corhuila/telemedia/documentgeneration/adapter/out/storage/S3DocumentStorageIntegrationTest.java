@@ -88,6 +88,24 @@ class S3DocumentStorageIntegrationTest {
     }
 
     @Test
+    void aStoredPdfIsDownloadedBackThroughItsPresignedUrl() throws Exception {
+        S3DocumentStorage storage = storage(BUCKET, Duration.ofMinutes(5));
+        String storedKey = "integration-tests/" + UUID.randomUUID() + ".pdf";
+        byte[] pdf = "%PDF-1.7 stored by the adapter".getBytes(StandardCharsets.US_ASCII);
+        try {
+            storage.store(storedKey, pdf);
+
+            HttpResponse<byte[]> response = get(storage.presignDownload(storedKey));
+
+            assertThat(response.statusCode()).isEqualTo(200);
+            assertThat(response.body()).isEqualTo(pdf);
+            assertThat(response.headers().firstValue("Content-Type")).contains("application/pdf");
+        } finally {
+            client.removeObject(RemoveObjectArgs.builder().bucket(BUCKET).object(storedKey).build());
+        }
+    }
+
+    @Test
     void anExpiredUrlIsRejectedByStorage() throws Exception {
         DownloadLink link = storage(BUCKET, Duration.ofSeconds(1)).presignDownload(key);
 
