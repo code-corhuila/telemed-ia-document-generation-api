@@ -15,20 +15,29 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
+import co.edu.corhuila.telemedia.documentgeneration.adapter.in.background.BackgroundPdfGenerator;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.in.background.SchedulingDocumentGeneration;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.consultation.HttpConsultationSummaryReader;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.pdf.PdfBoxRenderer;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcConsultationDocumentRepository;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcDocumentStatusStore;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcIdempotentDocumentStore;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.UuidGenerator;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.storage.S3DocumentStorage;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentDownloads;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentGeneration;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentPdfGeneration;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentQueries;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationDocumentRepository;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummaryReader;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.DocumentStatusStore;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.DocumentStorage;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.IdGenerator;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.IdempotentDocumentStore;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfRenderer;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentDownloadService;
-import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentGenerationService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentQueryService;
+import co.edu.corhuila.telemedia.documentgeneration.application.usecase.PdfGenerationService;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class DocumentGenerationApplicationTest {
@@ -47,6 +56,7 @@ class DocumentGenerationApplicationTest {
         TestJwt.register(registry);
         TestDatabase.register(registry);
         TestStorage.register(registry);
+        TestGeneration.register(registry);
     }
 
     @Test
@@ -82,9 +92,38 @@ class DocumentGenerationApplicationTest {
         assertThat(context.getBean(DocumentQueries.class)).isInstanceOf(DocumentQueryService.class);
         assertThat(context.getBean(IdempotentDocumentStore.class)).isInstanceOf(JdbcIdempotentDocumentStore.class);
         assertThat(context.getBean(IdGenerator.class)).isInstanceOf(UuidGenerator.class);
-        assertThat(context.getBean(DocumentGeneration.class)).isInstanceOf(DocumentGenerationService.class);
+        assertThat(context.getBean(DocumentGeneration.class)).isInstanceOf(SchedulingDocumentGeneration.class);
+        assertThat(context.getBean(DocumentPdfGeneration.class)).isInstanceOf(PdfGenerationService.class);
+        assertThat(context.getBean(DocumentStatusStore.class)).isInstanceOf(JdbcDocumentStatusStore.class);
+        assertThat(context.getBean(ConsultationSummaryReader.class)).isInstanceOf(HttpConsultationSummaryReader.class);
+        assertThat(context.getBean(PdfRenderer.class)).isInstanceOf(PdfBoxRenderer.class);
+        assertThat(context.getBean(BackgroundPdfGenerator.class)).isNotNull();
         assertThat(context.getBean(DocumentStorage.class)).isInstanceOf(S3DocumentStorage.class);
         assertThat(context.getBean(DocumentDownloads.class)).isInstanceOf(DocumentDownloadService.class);
+    }
+
+    @Test
+    void generationLimitsAreDeclared() {
+        // DEC-005: 30 s per attempt; DEC-006: bounded executor, resume sweep, backoff with jitter.
+        assertThat(environment.getProperty("generation.attempt-timeout-seconds")).isEqualTo("30");
+        assertThat(environment.getProperty("generation.executor-threads")).isEqualTo("2");
+        assertThat(environment.getProperty("generation.max-in-flight")).isEqualTo("100");
+        assertThat(environment.getProperty("generation.resume-interval-seconds")).isEqualTo("60");
+        assertThat(environment.getProperty("generation.resume-batch-size")).isEqualTo("50");
+        assertThat(environment.getProperty("generation.retry-backoff-base-ms")).isEqualTo("5000");
+        assertThat(environment.getProperty("generation.retry-backoff-cap-ms")).isEqualTo("60000");
+        assertThat(environment.getProperty("generation.time-zone")).isEqualTo("America/Bogota");
+    }
+
+    @Test
+    void consultationClientLimitsAreDeclared() {
+        // Norma 5.7.2: bounded retries with backoff; the token is never versioned.
+        assertThat(environment.getProperty("consultation.base-url")).isEqualTo("http://localhost:8081");
+        assertThat(environment.getProperty("consultation.service-token")).isEmpty();
+        assertThat(environment.getProperty("consultation.request-timeout-ms")).isEqualTo("5000");
+        assertThat(environment.getProperty("consultation.max-attempts")).isEqualTo("3");
+        assertThat(environment.getProperty("consultation.backoff-base-ms")).isEqualTo("200");
+        assertThat(environment.getProperty("consultation.backoff-cap-ms")).isEqualTo("2000");
     }
 
     @Test

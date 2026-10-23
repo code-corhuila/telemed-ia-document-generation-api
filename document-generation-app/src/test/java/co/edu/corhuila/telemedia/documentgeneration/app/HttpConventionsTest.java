@@ -38,6 +38,7 @@ class HttpConventionsTest {
         TestJwt.register(registry);
         TestDatabase.register(registry);
         TestStorage.register(registry);
+        TestGeneration.register(registry);
     }
 
     private ResponseEntity<Map<String, Object>> getWithTrace(String path, String trace, boolean withToken) {
