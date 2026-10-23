@@ -25,9 +25,12 @@ import jakarta.servlet.http.HttpServletResponse;
  * <p>The header is tracing metadata only; it is never used for authentication. A value
  * that is too long or carries characters outside {@code [A-Za-z0-9._:-]} is replaced, so
  * it cannot inject content into the logs.
+ *
+ * <p>It runs just inside the server observation filter (order {@code HIGHEST_PRECEDENCE + 1}),
+ * so the request span is already open and the access line carries its trace (OBS-DG-02).
  */
 @Component
-@Order(Ordered.HIGHEST_PRECEDENCE)
+@Order(Ordered.HIGHEST_PRECEDENCE + 2)
 public class CorrelationFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-Correlation-Id";
