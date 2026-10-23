@@ -15,6 +15,8 @@ final class TestGeneration {
     static void register(DynamicPropertyRegistry registry) {
         registry.add("CONSULTATION_BASE_URL", () -> "http://localhost:8081");
         registry.add("IDENTITY_URL", () -> "http://localhost:8082");
+        // Any free management port, so contexts never compete for 9081.
+        registry.add("MANAGEMENT_PORT", () -> "0");
         registry.add("GENERATION_BACKGROUND_ENABLED", () -> "false");
     }
 }
