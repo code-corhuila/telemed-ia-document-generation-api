@@ -94,6 +94,24 @@ server:
     include-stacktrace: never
     include-exception: false
 
+# NFR-005: metrics for the Prometheus of telemed-ia-infra-postgres. They are served on
+# their own port, inside the platform network only: never published, never routed by
+# the gateway, so the scrape needs no token.
+management:
+  server:
+    port: ${MANAGEMENT_PORT:9081}
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      # Buckets of the HTTP latency SLI (week 11 workshop).
+      slo:
+        http.server.requests: 100ms,500ms,1s,2s,5s
+
 # Numeral 5.3.9: every log line is JSON and carries the request's correlationId.
 logging:
   structured:
