@@ -1,0 +1,274 @@
+# Copy of telemed-ia-docs/07-api/contracts/openapi/document-service.yaml at 25c01b3.
+# The contract lives in telemed-ia-docs; update this copy when it changes, never edit it here.
+openapi: 3.0.3
+
+info:
+  title: Document Service API
+  version: 2.0.0
+  description: |
+    Document Generation bounded-context API for TeleMed IA.
+
+    Generates consultation PDF documents from valid post-consultation summaries
+    and gives each patient authorized access to their own documents.
+
+    ## Ownership
+    Per ADR-010, this service owns PDF generation and document metadata
+    (`document_generation.consultation_document`). It does NOT own clinical
+    information: summary content stays in Medical Consultation.
+
+    ## Generation flow
+    Per DEC-001, generation is asynchronous. The normal trigger is the
+    `PostConsultationSummaryGenerated` event; `POST /generate` is the
+    operational HTTP trigger for the same use case. Both paths are idempotent
+    by `summaryId` (one document per summary). Retries are internal and
+    bounded to three attempts (DEC-005); there is no public manual-retry
+    endpoint.
+
+    ## Authorization
+    Every operation validates the RS256 JWT in the service (D-C12). Patients
+    can only read their own documents: a document that belongs to another
+    patient returns `403 FORBIDDEN`, never `404`, so its existence is not
+    disclosed (DEC-004).
+
+    ## Binary delivery
+    Per ADR-015 and ADR-021, PDF binaries live in S3-compatible object storage
+    (RustFS). The API never returns the binary
+    or the storage reference; it returns a presigned URL valid for 5 minutes.
+
+servers:
+  - url: /api/v1/documents
+    description: Public route through the API Gateway
+
+  - url: http://localhost:8080/api/documents
+    description: Direct local route of the service (the Gateway strips /v1)
+
+tags:
+  - name: Documents
+    description: Consultation PDF generation and retrieval
+
+paths:
+
+  /:
+    get:
+      summary: List the authenticated patient's documents
+      description: |
+        Returns the documents of the patient identified by the validated JWT,
+        from the most recent to the oldest (`createdAt` descending). The
+        patient identifier is never taken from a query parameter.
+      tags: [Documents]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/PageParam'
+        - $ref: './_shared.yaml#/components/parameters/LimitParam'
+        - $ref: './_shared.yaml#/components/parameters/CorrelationId'
+        - name: status
+          in: query
+          required: false
+          description: Optional status filter. An unknown value returns 400.
+          schema:
+            $ref: '#/components/schemas/DocumentStatus'
+      responses:
+        '200':
+          description: Paginated list of the patient's documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDocumentResponse'
+        '400':
+          $ref: './_shared.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './_shared.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './_shared.yaml#/components/responses/Forbidden'
+
+  /generate:
+    post:
+      summary: Request PDF generation for a post-consultation summary
+      description: |
+        Creates the `PENDING` document for a post-consultation summary; the PDF
+        is generated asynchronously afterwards.
+
+        - First request with a new `Idempotency-Key`: `201` with `Location`.
+        - Same key and same body: `200` with the same document; nothing new is created.
+        - Same key with a different body: `422 BUSINESS_RULE_VIOLATION`.
+        - A document already exists for `summaryId` (any key): `200` with that
+          document, matching the event-consumer idempotency rule.
+
+        Restricted to the `ADMIN` role: the regular trigger is the
+        `PostConsultationSummaryGenerated` event, not a patient action.
+      tags: [Documents]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdempotencyKey'
+        - $ref: './_shared.yaml#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateDocumentRequest'
+      responses:
+        '201':
+          description: Document created in `PENDING`; generation continues asynchronously
+          headers:
+            Location:
+              description: URI of the created document
+              schema:
+                type: string
+                example: /api/v1/documents/6f178b1a-9c0d-4c23-96ad-1e8da3b2ef6d
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationDocument'
+        '200':
+          description: Idempotent repetition; returns the existing document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationDocument'
+        '400':
+          $ref: './_shared.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './_shared.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './_shared.yaml#/components/responses/Forbidden'
+        '422':
+          $ref: './_shared.yaml#/components/responses/UnprocessableEntity'
+
+  /{id}:
+    get:
+      summary: Get consultation document metadata
+      tags: [Documents]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdParam'
+        - $ref: './_shared.yaml#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Document metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ConsultationDocument'
+        '400':
+          $ref: './_shared.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './_shared.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './_shared.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: './_shared.yaml#/components/responses/NotFound'
+
+  /{id}/download:
+    get:
+      summary: Get a short-lived download URL for a consultation PDF
+      description: |
+        Returns a presigned object storage URL valid for 5 minutes (ADR-015,
+        ADR-021). The browser
+        downloads the PDF directly from that URL. Ownership is validated before
+        the URL is issued. A document that is not `AVAILABLE` returns
+        `422 BUSINESS_RULE_VIOLATION`.
+      tags: [Documents]
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: './_shared.yaml#/components/parameters/IdParam'
+        - $ref: './_shared.yaml#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Presigned download URL
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DocumentDownload'
+        '400':
+          $ref: './_shared.yaml#/components/responses/BadRequest'
+        '401':
+          $ref: './_shared.yaml#/components/responses/Unauthorized'
+        '403':
+          $ref: './_shared.yaml#/components/responses/Forbidden'
+        '404':
+          $ref: './_shared.yaml#/components/responses/NotFound'
+        '422':
+          $ref: './_shared.yaml#/components/responses/UnprocessableEntity'
+        '503':
+          $ref: './_shared.yaml#/components/responses/ServiceUnavailable'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      $ref: './_shared.yaml#/components/securitySchemes/bearerAuth'
+
+  schemas:
+
+    DocumentStatus:
+      type: string
+      description: Lifecycle state, enforced by the database transition trigger
+      enum: [PENDING, GENERATING, AVAILABLE, ERROR]
+      example: AVAILABLE
+
+    GenerateDocumentRequest:
+      type: object
+      additionalProperties: false
+      required: [summaryId, patientId]
+      properties:
+        summaryId:
+          $ref: './_shared.yaml#/components/schemas/Id'
+        patientId:
+          $ref: './_shared.yaml#/components/schemas/Id'
+
+    ConsultationDocument:
+      type: object
+      description: |
+        Public representation of `consultation_document`. It never includes
+        `storage_reference` (ADR-015) or the internal `error_message`.
+      required: [id, summaryId, patientId, format, status, retryCount, createdAt]
+      properties:
+        id:
+          $ref: './_shared.yaml#/components/schemas/Id'
+        summaryId:
+          $ref: './_shared.yaml#/components/schemas/Id'
+        patientId:
+          $ref: './_shared.yaml#/components/schemas/Id'
+        format:
+          type: string
+          enum: [PDF]
+        status:
+          $ref: '#/components/schemas/DocumentStatus'
+        retryCount:
+          type: integer
+          minimum: 0
+          maximum: 3
+          description: Generation attempts already retried (bounded by DEC-005)
+        createdAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+        generatedAt:
+          allOf:
+            - $ref: './_shared.yaml#/components/schemas/Timestamp'
+          nullable: true
+          description: Present only when `status` is `AVAILABLE`
+
+    DocumentDownload:
+      type: object
+      required: [downloadUrl, expiresAt]
+      properties:
+        downloadUrl:
+          type: string
+          format: uri
+          description: Presigned object storage URL; valid until `expiresAt`
+        expiresAt:
+          $ref: './_shared.yaml#/components/schemas/Timestamp'
+
+    PaginatedDocumentResponse:
+      allOf:
+        - $ref: './_shared.yaml#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/ConsultationDocument'
