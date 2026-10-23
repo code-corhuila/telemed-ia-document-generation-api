@@ -76,7 +76,8 @@ class MicrometerGenerationMetricsTest {
 
         assertThat(registry.getMeters()).flatExtracting(meter -> meter.getId().getTags())
                 .extracting(tag -> tag.getKey())
-                .containsOnly("outcome");
+                // "le" is the histogram bucket bound: a fixed set of values.
+                .containsOnly("outcome", "le");
         assertThat(registry.getMeters()).extracting(Meter::getId).extracting(Meter.Id::getName)
                 .allMatch(name -> name.startsWith("document.generation."));
     }
