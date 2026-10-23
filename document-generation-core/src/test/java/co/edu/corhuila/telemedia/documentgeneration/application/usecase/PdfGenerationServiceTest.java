@@ -162,7 +162,7 @@ class PdfGenerationServiceTest {
 
         assertThat(service.generate(document.id(), TRACE)).isEqualTo(GenerationAttempt.RETRY);
         assertThat(renderer.rendered).isNull();
-        assertThat(statusStore.last().errorMessage()).contains("does not match");
+        assertThat(statusStore.last().errorMessage()).contains("summary does not match the document");
     }
 
     @Test
