@@ -15,6 +15,9 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.DoubleSupplier;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -39,6 +42,7 @@ public final class HttpConsultationSummaryReader implements ConsultationSummaryR
     /** Key of a follow-up the service sends as plain text instead of an object. */
     static final String FOLLOW_UP_TEXT = "indicaciones";
 
+    private static final Logger LOG = LoggerFactory.getLogger(HttpConsultationSummaryReader.class);
     private static final ObjectMapper JSON = new ObjectMapper();
 
     /**
@@ -94,10 +98,20 @@ public final class HttpConsultationSummaryReader implements ConsultationSummaryR
         this.base = url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
+    /** The document only stores a neutral message, so the reason is logged here. */
     @Override
     public ConsultationSummary read(UUID summaryId, String correlationId) {
         Objects.requireNonNull(summaryId, "summaryId");
         Objects.requireNonNull(correlationId, "correlationId");
+        try {
+            return fetch(summaryId, correlationId);
+        } catch (SummaryUnavailableException e) {
+            LOG.warn("summary {} could not be read: {}", summaryId, e.getMessage());
+            throw e;
+        }
+    }
+
+    private ConsultationSummary fetch(UUID summaryId, String correlationId) {
         JsonNode postSummary = get("/api/post-summaries/" + summaryId, correlationId);
         UUID consultationId = uuid(postSummary, "consultationId");
         JsonNode attention = get("/api/consultations/" + consultationId + "/attention", correlationId);
