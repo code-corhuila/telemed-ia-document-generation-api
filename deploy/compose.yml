@@ -39,6 +39,8 @@ services:
       SERVICE_CLIENT_SECRET: "${DOCUMENT_GENERATION_SERVICE_CLIENT_SECRET:-}"
       # Metrics for Prometheus (NFR-005): internal port, never published.
       MANAGEMENT_PORT: "9081"
+      # Traces (OBS-DG-02): the OpenTelemetry collector of the platform, OTLP over HTTP.
+      OTLP_TRACING_ENDPOINT: "${OTLP_TRACING_ENDPOINT:-http://otel-collector:4318/v1/traces}"
     expose:
       - "8080"
       - "9081"
