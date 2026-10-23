@@ -1,0 +1,729 @@
+# Copy of telemed-ia-docs/07-api/contracts/openapi/_shared.yaml at 0f7ab36.
+# The contract lives in telemed-ia-docs; update this copy when it changes, never edit it here.
+openapi: 3.0.3
+
+info:
+  title: Shared Components
+  version: 1.0.0
+  description: |
+    Shared schemas and components used across all TeleMed IA API contracts.
+    Reference these components in your contracts with:
+    $ref: './_shared.yaml#/components/...'
+
+    ## Language convention
+    Technical identifiers and enum values are in English, per ADR-001.
+    User-facing Spanish translations are applied at the presentation layer.
+    Shared API conventions are defined in Anexo C (course norm, -api hexagonal repository annex; see the norm repository, folder 2-anexos/). JSON properties use camelCase;
+    identifiers use UUID; money uses integer minor units; and date-time values
+    use RFC 3339 UTC.
+
+components:
+
+  schemas:
+
+    # -----
+
+    PaginatedMeta:
+      type: object
+      description: Pagination metadata included in list responses
+      required:
+        - page
+        - limit
+        - total
+        - totalPages
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 20
+
+        total:
+          type: integer
+          minimum: 0
+          description: Total number of records matching the active filters
+          example: 142
+
+        totalPages:
+          type: integer
+          minimum: 0
+          description: Total number of pages for the current limit
+          example: 8
+
+    PaginatedResponse:
+      type: object
+      description: Shared pagination envelope. Domain contracts may constrain data item schemas.
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          items: {}
+        meta:
+          $ref: '#/components/schemas/PaginatedMeta'
+
+    # -----
+
+    ErrorResponse:
+      type: object
+      description: Standard error format for API errors with a response body
+      required:
+        - error
+        - message
+        - traceId
+      properties:
+        error:
+          type: string
+          description: Stable machine-readable error code in SCREAMING_SNAKE_CASE
+          example: VALIDATION_ERROR
+
+        message:
+          type: string
+          description: Human-readable message shown at the presentation layer
+          example: The email field is required
+
+        details:
+          type: array
+          description: Field-specific validation errors. Omitted when no field-level details apply.
+          items:
+            type: object
+            required:
+              - field
+              - message
+            properties:
+              field:
+                type: string
+                example: email
+
+              message:
+                type: string
+                example: must not be empty
+
+        traceId:
+          type: string
+          description: Required trace identifier correlating the response with backend logs and the request's X-Correlation-Id.
+          example: 550e8400-e29b-41d4-a716-446655440000
+
+    # -----
+
+    Id:
+      type: string
+      format: uuid
+      description: Canonical public and cross-service resource identifier
+      example: 550e8400-e29b-41d4-a716-446655440000
+
+    MoneyMinorUnits:
+      type: integer
+      format: int64
+      description: Monetary amount represented as an integer in minor currency units; floating-point amounts are prohibited.
+      example: 12500
+
+    MoneyAmount:
+      type: object
+      description: Common money representation using camelCase property names and integer minor units.
+      required:
+        - totalCents
+      properties:
+        totalCents:
+          $ref: '#/components/schemas/MoneyMinorUnits'
+
+    Timestamp:
+      type: string
+      format: date-time
+      description: RFC 3339 date-time in UTC, expressed with the Z suffix
+      example: '2026-09-24T15:30:00Z'
+
+    AuditFields:
+      type: object
+      description: Audit fields included in persisted entities
+      properties:
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+
+        updatedAt:
+          $ref: '#/components/schemas/Timestamp'
+
+        createdBy:
+          allOf:
+            - $ref: '#/components/schemas/Id'
+          nullable: true
+          description: Present when auditing is enabled for the entity
+
+    Role:
+      type: string
+      description: Technical role identifier used across API, JWT, and inter-service contracts
+      enum:
+        - PATIENT
+        - PROFESSIONAL
+        - ADMIN
+      example: PATIENT
+
+    # -----
+
+    User:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+
+        fullName:
+          type: string
+
+        email:
+          type: string
+          format: email
+
+        identityDocument:
+          type: string
+
+        role:
+          $ref: '#/components/schemas/Role'
+
+        verified:
+          type: boolean
+
+        active:
+          type: boolean
+          description: Whether the user account is active; this is distinct from Professional profile status.
+
+        registrationDate:
+          $ref: '#/components/schemas/Timestamp'
+
+        lastAccess:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+
+    Patient:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+
+        userId:
+          $ref: '#/components/schemas/Id'
+          description: External Identity & Access user identifier
+
+        birthDate:
+          type: string
+          format: date
+          nullable: true
+
+        phone:
+          type: string
+          nullable: true
+
+        medicalHistory:
+          type: string
+          nullable: true
+          description: Free-text medical history of the patient
+          example: "Hypertension, diabetes type 2"
+    Professional:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+
+        identityUserId:
+          $ref: '#/components/schemas/Id'
+          description: External Identity & Access user identifier
+
+        licenseNumber:
+          type: string
+
+        specialty:
+          type: object
+          description: Professional Management-owned specialty information
+          properties:
+            id:
+              $ref: '#/components/schemas/Id'
+
+            name:
+              type: string
+
+            description:
+              type: string
+
+        professionalType:
+          type: string
+          enum:
+            - GENERAL_PRACTITIONER
+            - SPECIALIST
+          description: Type/classification of the professional.
+
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - INACTIVE
+          description: Current status of the professional profile in TeleMed IA. This is independent from appointment availability, appointment status, and user account status.
+
+        yearsExperience:
+          type: integer
+          minimum: 0
+    Appointment:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+
+        patientId:
+          $ref: '#/components/schemas/Id'
+          description: External Patient Management identifier
+
+        professionalId:
+          $ref: '#/components/schemas/Id'
+          description: External Professional Management identifier
+
+        startTime:
+          $ref: '#/components/schemas/Timestamp'
+
+        endTime:
+          $ref: '#/components/schemas/Timestamp'
+
+        status:
+          type: string
+          description: Current appointment lifecycle state; distinct from Professional profile status.
+          enum:
+            - CONFIRMED
+            - RESCHEDULED
+            - COMPLETED
+            - CANCELLED
+            - NO_SHOW
+
+        cancellationReason:
+          type: string
+          nullable: true
+
+        preconsultationSummaryId:
+          allOf:
+            - $ref: '#/components/schemas/Id'
+          nullable: true
+          description: External Intelligent Agent pre-consultation summary identifier
+
+        postSummaryId:
+          allOf:
+            - $ref: '#/components/schemas/Id'
+          nullable: true
+          description: External Medical Consultation post-summary identifier
+    Medication:
+      type: object
+      description: Structured medication information recorded during the consultation
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          description: Medication name
+          example: Acetaminophen
+
+        dosage:
+          type: string
+          description: Prescribed dosage when applicable
+          example: 500 mg
+
+        frequency:
+          type: string
+          description: Administration frequency when applicable
+          example: Every 8 hours
+
+        duration:
+          type: string
+          description: Treatment duration when applicable
+          example: 3 days
+
+    PreconsultationSummary:
+      type: object
+      required:
+        - id
+        - conversationId
+        - patientId
+        - consultationReason
+        - detailedSymptoms
+        - createdAt
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+
+        conversationId:
+          $ref: '#/components/schemas/Id'
+          description: Agent-owned conversation identifier
+
+        appointmentId:
+          allOf:
+            - $ref: '#/components/schemas/Id'
+          nullable: true
+          description: External appointment identifier when the pre-consultation is associated with an appointment
+
+        patientId:
+          $ref: '#/components/schemas/Id'
+          description: External Patient Management identifier
+
+        consultationReason:
+          type: string
+          description: Main reason reported for the consultation
+
+        evolutionTime:
+          type: string
+          nullable: true
+          description: Reported duration or evolution of the condition
+
+        detailedSymptoms:
+          type: string
+          description: Symptoms reported during the pre-consultation
+
+        relevantHistory:
+          type: string
+          nullable: true
+          description: Relevant patient-provided history when applicable
+
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+    AttentionSummary:
+      type: object
+      required:
+        - id
+        - recommendations
+        - medications
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+
+        diagnosis:
+          type: string
+          nullable: true
+          description: Clinical diagnosis when applicable
+
+        recommendations:
+          type: string
+          description: Recommendations recorded by the healthcare professional
+
+        medications:
+          type: array
+          description: Structured medications recorded for the consultation. Empty when no medications are registered.
+          items:
+            $ref: '#/components/schemas/Medication'
+          example: []
+
+        observations:
+          type: string
+          nullable: true
+          description: Additional clinical observations when applicable
+
+        referral:
+          type: string
+          nullable: true
+          description: Referral information when another specialty or service is required
+
+        followUp:
+          type: object
+          nullable: true
+          additionalProperties: true
+          description: Structured follow-up information when applicable
+    PostSummary:
+      type: object
+      required:
+        - id
+        - consultationId
+        - appointmentId
+        - patientId
+        - preconsultationSummaryId
+        - attentionSummaryId
+        - generatedAt
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+
+        consultationId:
+          $ref: '#/components/schemas/Id'
+          description: Medical Consultation identifier
+
+        appointmentId:
+          $ref: '#/components/schemas/Id'
+          description: External Appointment Scheduling identifier
+
+        patientId:
+          $ref: '#/components/schemas/Id'
+          description: External Patient Management identifier
+
+        preconsultationSummaryId:
+          $ref: '#/components/schemas/Id'
+          description: External Intelligent Agent pre-consultation summary identifier
+
+        attentionSummaryId:
+          $ref: '#/components/schemas/Id'
+          description: Medical Consultation attention summary identifier
+
+        generatedAt:
+          $ref: '#/components/schemas/Timestamp'
+    Conversation:
+      type: object
+      required:
+        - id
+        - patientId
+        - status
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+
+        patientId:
+          $ref: '#/components/schemas/Id'
+          description: External Patient Management identifier
+
+        appointmentId:
+          allOf:
+            - $ref: '#/components/schemas/Id'
+          nullable: true
+          description: External Appointment Scheduling identifier when available
+
+        startDateTime:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+
+        endDateTime:
+          allOf:
+            - $ref: '#/components/schemas/Timestamp'
+          nullable: true
+
+        status:
+          type: string
+          enum:
+            - ACTIVE
+            - FINISHED
+
+        questionLimit:
+          type: integer
+          minimum: 0
+          nullable: true
+
+        questionsAsked:
+          type: integer
+          minimum: 0
+          default: 0
+
+        finalizationReason:
+          type: string
+          nullable: true
+
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+    Message:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+
+        sender:
+          type: string
+          enum:
+            - PATIENT
+            - AGENT
+
+        content:
+          type: string
+
+        sentAt:
+          $ref: '#/components/schemas/Timestamp'
+
+    Notification:
+      type: object
+      properties:
+        id:
+          $ref: '#/components/schemas/Id'
+
+        type:
+          type: string
+
+        message:
+          type: string
+
+        read:
+          type: boolean
+
+        sentAt:
+          $ref: '#/components/schemas/Timestamp'
+
+
+    # -----
+
+    PaginatedProfessionalResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Professional'
+
+    PaginatedAppointmentResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Appointment'
+
+    PaginatedConversationResponse:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items:
+                $ref: '#/components/schemas/Conversation'
+  # -----
+
+  parameters:
+
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Required for resource-creation operations, per Anexo C.
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+
+    CorrelationId:
+      name: X-Correlation-Id
+      in: header
+      required: false
+      description: UUID correlation identifier per Anexo C. The server generates one when absent and returns it in the response.
+      schema:
+        type: string
+        format: uuid
+
+    PageParam:
+      name: page
+      in: query
+      description: Page number starting at 1. Values below 1 or non-integer values return 400 Bad Request.
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    LimitParam:
+      name: limit
+      in: query
+      description: Number of results per page. Valid range is 1 to 100; invalid values return 400 Bad Request.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    IdParam:
+      name: id
+      in: path
+      required: true
+      description: Unique UUID resource identifier
+      schema:
+        $ref: '#/components/schemas/Id'
+  # -----
+
+  responses:
+
+    BadRequest:
+      description: Malformed request or request validation failure
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Authentication credentials are missing, invalid, expired, or revoked
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Authenticated caller does not have permission to perform the operation
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Requested resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Conflict:
+      description: |
+        Request conflicts with the current state of an existing resource or the system.
+
+        For appointment slot conflicts, the `error` field is one of:
+        - `SLOT_UNAVAILABLE`: the professional already has an overlapping appointment.
+        - `PATIENT_SLOT_CONFLICT`: the patient already has an overlapping appointment with another professional.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    UnprocessableEntity:
+      description: Syntactically valid request that violates a domain rule
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    TooManyRequests:
+      description: Documented rate limit has been exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalError:
+      description: Unexpected internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    ServiceUnavailable:
+      description: Service or required dependency is temporarily unavailable
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  # -----
+
+  securitySchemes:
+
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: RS256 only; HS256 and none are rejected, per Anexo C.
+
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        JWT access token obtained from POST /api/v1/auth/login.
+        External clients must include the token in the request header:
+
+        Authorization: Bearer <token>
+
+security:
+  - BearerAuth: []
