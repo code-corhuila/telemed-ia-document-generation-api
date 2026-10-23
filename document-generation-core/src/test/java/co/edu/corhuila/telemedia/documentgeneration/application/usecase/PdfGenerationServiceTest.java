@@ -90,6 +90,7 @@ class PdfGenerationServiceTest {
         assertThat(statusStore.event)
                 .isEqualTo(new PdfGeneratedEvent(EVENT, document.id(), SUMMARY, PATIENT, T0, TRACE));
         assertThat(renderer.rendered).isEqualTo(reader.summary);
+        assertThat(reader.correlationId).isEqualTo(TRACE);
     }
 
     @Test
@@ -268,10 +269,12 @@ class PdfGenerationServiceTest {
         private RuntimeException failure;
         private Runnable onRead = () -> { };
         private int reads;
+        private String correlationId;
 
         @Override
-        public ConsultationSummary read(UUID summaryId) {
+        public ConsultationSummary read(UUID summaryId, String correlationId) {
             reads++;
+            this.correlationId = correlationId;
             onRead.run();
             if (failure != null) {
                 throw failure;
