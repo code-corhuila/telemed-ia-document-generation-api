@@ -37,8 +37,11 @@ services:
       SERVICE_CLIENT_ID: "${DOCUMENT_GENERATION_SERVICE_CLIENT_ID:-document-generation}"
       # Delivered privately by the identity owner; lives only in env/<environment>.env.
       SERVICE_CLIENT_SECRET: "${DOCUMENT_GENERATION_SERVICE_CLIENT_SECRET:-}"
+      # Metrics for Prometheus (NFR-005): internal port, never published.
+      MANAGEMENT_PORT: "9081"
     expose:
       - "8080"
+      - "9081"
     networks:
       - platform
 
