@@ -39,6 +39,7 @@ class GenerateRouteTest {
         TestJwt.register(registry);
         TestDatabase.register(registry);
         TestStorage.register(registry);
+        TestGeneration.register(registry);
     }
 
     private ResponseEntity<Map<String, Object>> generate(String role, String body) {
