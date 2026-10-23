@@ -28,6 +28,7 @@ import co.edu.corhuila.telemedia.documentgeneration.adapter.in.http.CorrelationF
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.consultation.HttpConsultationSummaryReader;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.IdentityServiceTokens;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.ServiceTokens;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.metrics.MicrometerGenerationMetrics;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.pdf.PdfBoxRenderer;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcConsultationDocumentRepository;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcDocumentStatusStore;
@@ -41,6 +42,7 @@ import co.edu.corhuila.telemedia.documentgeneration.application.port.in.Document
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationDocumentRepository;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummaryReader;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.DocumentStatusStore;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.GenerationMetrics;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.IdGenerator;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.IdempotentDocumentStore;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfRenderer;
@@ -49,6 +51,8 @@ import co.edu.corhuila.telemedia.documentgeneration.application.usecase.Document
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentGenerationService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentQueryService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.PdfGenerationService;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.minio.MinioClient;
 
 /**
@@ -136,12 +140,17 @@ public class DocumentGenerationConfiguration {
     }
 
     @Bean
+    GenerationMetrics generationMetrics(MeterRegistry registry) {
+        return new MicrometerGenerationMetrics(registry);
+    }
+
+    @Bean
     DocumentPdfGeneration documentPdfGeneration(ConsultationDocumentRepository repository,
             DocumentStatusStore statusStore, ConsultationSummaryReader summaries, PdfRenderer renderer,
-            S3DocumentStorage storage, IdGenerator ids, Clock clock,
+            S3DocumentStorage storage, IdGenerator ids, GenerationMetrics metrics, Clock clock,
             @Value("${generation.attempt-timeout-seconds}") long attemptTimeoutSeconds) {
-        return new PdfGenerationService(repository, statusStore, summaries, renderer, storage, ids, clock,
-                Duration.ofSeconds(attemptTimeoutSeconds));
+        return new PdfGenerationService(repository, statusStore, summaries, renderer, storage, ids, metrics,
+                clock, Duration.ofSeconds(attemptTimeoutSeconds));
     }
 
     /**
@@ -176,6 +185,14 @@ public class DocumentGenerationConfiguration {
         return new BackgroundPdfGenerator(generation, settings,
                 (task, delay) -> pdfGenerationExecutor.schedule(task, delay.toMillis(), TimeUnit.MILLISECONDS),
                 () -> ThreadLocalRandom.current().nextDouble(), () -> UUID.randomUUID().toString());
+    }
+
+    /** Saturation signal: documents queued or waiting for a retry (week 11 workshop). */
+    @Bean
+    Gauge pdfGenerationInFlight(BackgroundPdfGenerator generator, MeterRegistry registry) {
+        return Gauge.builder("document.generation.in.flight", generator, BackgroundPdfGenerator::inFlight)
+                .description("Documents queued or waiting for a retry")
+                .register(registry);
     }
 
     /** DEC-006: documents a restart left behind are resumed from startup on. */
