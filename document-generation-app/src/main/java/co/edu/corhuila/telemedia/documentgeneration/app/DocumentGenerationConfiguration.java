@@ -26,6 +26,8 @@ import co.edu.corhuila.telemedia.documentgeneration.adapter.in.background.Backgr
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.background.SchedulingDocumentGeneration;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.http.CorrelationFilter;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.consultation.HttpConsultationSummaryReader;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.IdentityServiceTokens;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.ServiceTokens;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.pdf.PdfBoxRenderer;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcConsultationDocumentRepository;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcDocumentStatusStore;
@@ -99,9 +101,29 @@ public class DocumentGenerationConfiguration {
         return new PdfBoxRenderer(ZoneId.of(timeZone));
     }
 
+    /**
+     * Norma 5.7: the token of this service, from the identity service. Without a client secret
+     * the service still starts (other domains share the platform), but summaries cannot be read.
+     */
+    @Bean
+    ServiceTokens serviceTokens(@Value("${identity.base-url}") String identityUrl,
+            @Value("${identity.client-id}") String clientId,
+            @Value("${identity.client-secret}") String clientSecret,
+            @Value("${identity.request-timeout-ms}") long requestTimeoutMs,
+            @Value("${identity.refresh-margin-seconds}") long refreshMarginSeconds, Clock clock) {
+        if (clientSecret == null || clientSecret.isBlank()) {
+            LOG.warn("SERVICE_CLIENT_SECRET is not set: consultation summaries cannot be read");
+            return ServiceTokens.NONE;
+        }
+        Duration requestTimeout = Duration.ofMillis(requestTimeoutMs);
+        HttpClient http = HttpClient.newBuilder().connectTimeout(requestTimeout).build();
+        return new IdentityServiceTokens(http, new IdentityServiceTokens.Settings(URI.create(identityUrl), clientId,
+                clientSecret, requestTimeout, Duration.ofSeconds(refreshMarginSeconds)), clock);
+    }
+
     @Bean
     ConsultationSummaryReader consultationSummaryReader(@Value("${consultation.base-url}") String baseUrl,
-            @Value("${consultation.service-token}") String serviceToken,
+            ServiceTokens serviceTokens,
             @Value("${consultation.request-timeout-ms}") long requestTimeoutMs,
             @Value("${consultation.max-attempts}") int maxAttempts,
             @Value("${consultation.backoff-base-ms}") long backoffBaseMs,
@@ -109,8 +131,8 @@ public class DocumentGenerationConfiguration {
         Duration requestTimeout = Duration.ofMillis(requestTimeoutMs);
         HttpClient http = HttpClient.newBuilder().connectTimeout(requestTimeout).build();
         return new HttpConsultationSummaryReader(http, new HttpConsultationSummaryReader.Settings(
-                URI.create(baseUrl), serviceToken, requestTimeout, maxAttempts, Duration.ofMillis(backoffBaseMs),
-                Duration.ofMillis(backoffCapMs)));
+                URI.create(baseUrl), requestTimeout, maxAttempts, Duration.ofMillis(backoffBaseMs),
+                Duration.ofMillis(backoffCapMs)), serviceTokens);
     }
 
     @Bean
