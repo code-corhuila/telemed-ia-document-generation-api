@@ -37,6 +37,39 @@ storage:
   # Validity of a download URL (5 minutes).
   presigned-ttl-seconds: ${STORAGE_PRESIGNED_TTL_SECONDS:300}
 
+# DEC-005, DEC-006: PDF generation runs in the background inside this service.
+generation:
+  # Off only in tests that never generate a PDF.
+  background-enabled: ${GENERATION_BACKGROUND_ENABLED:true}
+  # Time limit of one attempt (DEC-005).
+  attempt-timeout-seconds: 30
+  # Threads that run attempts; they share the machine with the HTTP requests.
+  executor-threads: 2
+  # Documents queued or waiting for a retry; beyond that the resume sweep picks them up.
+  max-in-flight: 100
+  # Sweep for PENDING, GENERATING and retryable ERROR documents: at startup and then
+  # every interval, at most one batch per run.
+  resume-interval-seconds: 60
+  resume-batch-size: 50
+  # Wait before a retry: full jitter over base * 2^n, capped (norma 5.7.2).
+  retry-backoff-base-ms: 5000
+  retry-backoff-cap-ms: 60000
+  # Time zone of the issue date printed on the PDF.
+  time-zone: America/Bogota
+
+# DEC-006: the summary is read from Medical Consultation through its API.
+# CONSULTATION_BASE_URL is required. CONSULTATION_SERVICE_TOKEN is issued by the
+# identity service and never versioned (norma 5.7).
+consultation:
+  base-url: ${CONSULTATION_BASE_URL}
+  service-token: ${CONSULTATION_SERVICE_TOKEN:}
+  # Time limit of each request, connection included.
+  request-timeout-ms: 5000
+  # Attempts per request; only network errors, 429 and 5xx are retried (norma 5.7.2).
+  max-attempts: 3
+  backoff-base-ms: 200
+  backoff-cap-ms: 2000
+
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
