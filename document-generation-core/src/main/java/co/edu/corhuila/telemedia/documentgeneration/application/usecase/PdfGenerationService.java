@@ -15,6 +15,7 @@ import co.edu.corhuila.telemedia.documentgeneration.application.port.out.Consult
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummaryReader;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.DocumentStatusStore;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.DocumentStorage;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.GenerationMetrics;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.IdGenerator;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfGeneratedEvent;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfRenderer;
@@ -49,24 +50,33 @@ public final class PdfGenerationService implements DocumentPdfGeneration {
     private final PdfRenderer renderer;
     private final DocumentStorage storage;
     private final IdGenerator ids;
+    private final GenerationMetrics metrics;
     private final Clock clock;
     private final Duration attemptTimeout;
 
     public PdfGenerationService(ConsultationDocumentRepository repository, DocumentStatusStore statusStore,
             ConsultationSummaryReader summaries, PdfRenderer renderer, DocumentStorage storage, IdGenerator ids,
-            Clock clock, Duration attemptTimeout) {
+            GenerationMetrics metrics, Clock clock, Duration attemptTimeout) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.statusStore = Objects.requireNonNull(statusStore, "statusStore");
         this.summaries = Objects.requireNonNull(summaries, "summaries");
         this.renderer = Objects.requireNonNull(renderer, "renderer");
         this.storage = Objects.requireNonNull(storage, "storage");
         this.ids = Objects.requireNonNull(ids, "ids");
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.attemptTimeout = Objects.requireNonNull(attemptTimeout, "attemptTimeout");
     }
 
     @Override
     public GenerationAttempt generate(UUID documentId, String correlationId) {
+        Instant started = clock.instant();
+        GenerationAttempt outcome = attempt(documentId, correlationId);
+        metrics.attemptFinished(outcome, Duration.between(started, clock.instant()));
+        return outcome;
+    }
+
+    private GenerationAttempt attempt(UUID documentId, String correlationId) {
         Objects.requireNonNull(correlationId, "correlationId");
         Optional<ConsultationDocument> found = repository.findById(Objects.requireNonNull(documentId, "documentId"));
         if (found.isEmpty()) {
@@ -92,9 +102,11 @@ public final class PdfGenerationService implements DocumentPdfGeneration {
             ConsultationDocument available = generating.markAvailable(key, generatedAt);
             PdfGeneratedEvent event = new PdfGeneratedEvent(ids.newId(), generating.id(), generating.summaryId(),
                     generating.patientId(), generatedAt, correlationId);
-            return statusStore.complete(generating, available, event)
-                    ? GenerationAttempt.AVAILABLE
-                    : GenerationAttempt.SKIPPED;
+            if (!statusStore.complete(generating, available, event)) {
+                return GenerationAttempt.SKIPPED;
+            }
+            metrics.documentAvailable(Duration.between(generating.createdAt(), generatedAt));
+            return GenerationAttempt.AVAILABLE;
         } catch (AttemptFailed e) {
             return fail(generating, e.getMessage());
         } catch (SummaryUnavailableException e) {
