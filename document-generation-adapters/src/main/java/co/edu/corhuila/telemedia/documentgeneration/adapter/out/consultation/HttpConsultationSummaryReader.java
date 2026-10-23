@@ -21,6 +21,8 @@ import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.ServiceTokenException;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.ServiceTokens;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummary;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummary.Medication;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummaryReader;
@@ -33,7 +35,8 @@ import co.edu.corhuila.telemedia.documentgeneration.application.port.out.Summary
  * ({@code AttentionSummary} of consultation-service.yaml), both inside {@code {data}}.
  *
  * <p>Every call carries the service token and the correlation id (norma 5.7.3) and has its
- * own timeout. Only network failures, {@code 429} and {@code 5xx} are retried, a bounded
+ * own timeout. A {@code 401} is answered once with a new token, at once: the token may have
+ * expired or been revoked early. Only network failures, {@code 429} and {@code 5xx} are retried, a bounded
  * number of times with exponential backoff and full jitter (norma 5.7.2). Error messages
  * name the status only: the response body may carry clinical data.
  */
@@ -46,19 +49,16 @@ public final class HttpConsultationSummaryReader implements ConsultationSummaryR
     private static final ObjectMapper JSON = new ObjectMapper();
 
     /**
-     * @param serviceToken token issued to this service by Identity and Access (norma 5.7),
-     *        never versioned; blank sends no {@code Authorization}
      * @param backoffBase wait before the first retry, doubled on each one up to {@code backoffCap}
      */
-    public record Settings(URI baseUrl, String serviceToken, Duration requestTimeout, int maxAttempts,
-            Duration backoffBase, Duration backoffCap) {
+    public record Settings(URI baseUrl, Duration requestTimeout, int maxAttempts, Duration backoffBase,
+            Duration backoffCap) {
 
         public Settings {
             Objects.requireNonNull(baseUrl, "baseUrl");
             Objects.requireNonNull(requestTimeout, "requestTimeout");
             Objects.requireNonNull(backoffBase, "backoffBase");
             Objects.requireNonNull(backoffCap, "backoffCap");
-            serviceToken = serviceToken == null ? "" : serviceToken.strip();
             if (!"http".equals(baseUrl.getScheme()) && !"https".equals(baseUrl.getScheme())) {
                 throw new IllegalArgumentException("the consultation base URL must be absolute http(s)");
             }
@@ -81,17 +81,21 @@ public final class HttpConsultationSummaryReader implements ConsultationSummaryR
 
     private final HttpClient http;
     private final Settings settings;
+    private final ServiceTokens tokens;
     private final String base;
     private final Sleeper sleeper;
     private final DoubleSupplier random;
 
-    public HttpConsultationSummaryReader(HttpClient http, Settings settings) {
-        this(http, settings, Thread::sleep, () -> ThreadLocalRandom.current().nextDouble());
+    /** @param tokens the token of this service (norma 5.7), issued by the identity service */
+    public HttpConsultationSummaryReader(HttpClient http, Settings settings, ServiceTokens tokens) {
+        this(http, settings, tokens, Thread::sleep, () -> ThreadLocalRandom.current().nextDouble());
     }
 
-    HttpConsultationSummaryReader(HttpClient http, Settings settings, Sleeper sleeper, DoubleSupplier random) {
+    HttpConsultationSummaryReader(HttpClient http, Settings settings, ServiceTokens tokens, Sleeper sleeper,
+            DoubleSupplier random) {
         this.http = Objects.requireNonNull(http, "http");
         this.settings = Objects.requireNonNull(settings, "settings");
+        this.tokens = Objects.requireNonNull(tokens, "tokens");
         this.sleeper = Objects.requireNonNull(sleeper, "sleeper");
         this.random = Objects.requireNonNull(random, "random");
         String url = settings.baseUrl().toString();
@@ -131,9 +135,7 @@ public final class HttpConsultationSummaryReader implements ConsultationSummaryR
                 .header("Accept", "application/json")
                 .header("X-Correlation-Id", correlationId)
                 .GET();
-        if (!settings.serviceToken().isEmpty()) {
-            request.header("Authorization", "Bearer " + settings.serviceToken());
-        }
+        boolean renewed = false;
         SummaryUnavailableException last = null;
         for (int attempt = 1; attempt <= settings.maxAttempts(); attempt++) {
             if (attempt > 1) {
@@ -141,7 +143,19 @@ public final class HttpConsultationSummaryReader implements ConsultationSummaryR
             }
             HttpResponse<byte[]> response;
             try {
-                response = http.send(request.build(), HttpResponse.BodyHandlers.ofByteArray());
+                String token = tokens.token();
+                response = send(request, token);
+                if (response.statusCode() == 401 && !token.isEmpty() && !renewed) {
+                    renewed = true;
+                    tokens.invalidate(token);
+                    response = send(request, tokens.token());
+                }
+            } catch (ServiceTokenException e) {
+                last = new SummaryUnavailableException("no service token: " + e.getMessage(), e);
+                if (!e.retryable()) {
+                    throw last;
+                }
+                continue;
             } catch (IOException e) {
                 last = new SummaryUnavailableException("the consultation service could not be reached", e);
                 continue;
@@ -159,6 +173,15 @@ public final class HttpConsultationSummaryReader implements ConsultationSummaryR
             }
         }
         throw last;
+    }
+
+    private HttpResponse<byte[]> send(HttpRequest.Builder request, String token)
+            throws IOException, InterruptedException {
+        HttpRequest.Builder call = request.copy();
+        if (!token.isEmpty()) {
+            call.setHeader("Authorization", "Bearer " + token);
+        }
+        return http.send(call.build(), HttpResponse.BodyHandlers.ofByteArray());
     }
 
     /** Full jitter: a random wait between zero and the capped exponential backoff. */
