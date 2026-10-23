@@ -58,17 +58,28 @@ generation:
   time-zone: America/Bogota
 
 # DEC-006: the summary is read from Medical Consultation through its API.
-# CONSULTATION_BASE_URL is required. CONSULTATION_SERVICE_TOKEN is issued by the
-# identity service and never versioned (norma 5.7).
+# CONSULTATION_BASE_URL is required.
 consultation:
   base-url: ${CONSULTATION_BASE_URL}
-  service-token: ${CONSULTATION_SERVICE_TOKEN:}
   # Time limit of each request, connection included.
   request-timeout-ms: 5000
   # Attempts per request; only network errors, 429 and 5xx are retried (norma 5.7.2).
   max-attempts: 3
   backoff-base-ms: 200
   backoff-cap-ms: 2000
+
+# Norma 5.7: the service token is issued by the identity service (identity-and-access-api
+# #117) at POST /internal/service-token, inside the platform network only.
+# IDENTITY_URL is required. SERVICE_CLIENT_SECRET is never versioned; without it,
+# calls go without a token and Medical Consultation rejects them.
+identity:
+  base-url: ${IDENTITY_URL}
+  client-id: ${SERVICE_CLIENT_ID:document-generation}
+  client-secret: ${SERVICE_CLIENT_SECRET:}
+  # Time limit of the token request, connection included.
+  request-timeout-ms: 5000
+  # Tokens last about ten minutes and have no refresh token: replaced this long before.
+  refresh-margin-seconds: 60
 
 server:
   port: ${SERVER_PORT:8080}
