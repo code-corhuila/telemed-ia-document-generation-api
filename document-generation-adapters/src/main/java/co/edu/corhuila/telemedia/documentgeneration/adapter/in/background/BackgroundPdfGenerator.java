@@ -2,6 +2,7 @@ package co.edu.corhuila.telemedia.documentgeneration.adapter.in.background;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -16,6 +17,8 @@ import org.slf4j.MDC;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.http.CorrelationFilter;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentPdfGeneration;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.GenerationAttempt;
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
 
 /**
  * Drives {@link DocumentPdfGeneration} in the background (DEC-006):
@@ -28,12 +31,15 @@ import co.edu.corhuila.telemedia.documentgeneration.application.port.in.Generati
  *   <li>a sweep at startup and then every {@code resumeInterval} queues the documents left
  *       PENDING, GENERATING or retryable ERROR (a restart, a refused submission, an attempt
  *       that threw), each run with its own correlation id (norma 5.7.3).</li>
+ *   <li>each attempt is a span; one submitted during a request is a child of the request's
+ *       span, so the whole generation shows in one trace (OBS-DG-02).</li>
  * </ul>
  * Waiting retries live in memory only: after a restart the sweep finds them again.
  */
 public final class BackgroundPdfGenerator implements PdfGenerationQueue {
 
     private static final Logger LOG = LoggerFactory.getLogger(BackgroundPdfGenerator.class);
+    static final String SPAN_NAME = "pdf generation attempt";
 
     /**
      * @param backoffBase wait before the first retry, doubled on each one up to {@code backoffCap}
@@ -68,15 +74,22 @@ public final class BackgroundPdfGenerator implements PdfGenerationQueue {
     private final Scheduler scheduler;
     private final DoubleSupplier random;
     private final Supplier<String> newCorrelationId;
+    private final Tracer tracer;
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
 
     public BackgroundPdfGenerator(DocumentPdfGeneration generation, Settings settings, Scheduler scheduler,
             DoubleSupplier random, Supplier<String> newCorrelationId) {
+        this(generation, settings, scheduler, random, newCorrelationId, Tracer.NOOP);
+    }
+
+    public BackgroundPdfGenerator(DocumentPdfGeneration generation, Settings settings, Scheduler scheduler,
+            DoubleSupplier random, Supplier<String> newCorrelationId, Tracer tracer) {
         this.generation = Objects.requireNonNull(generation, "generation");
         this.settings = Objects.requireNonNull(settings, "settings");
         this.scheduler = Objects.requireNonNull(scheduler, "scheduler");
         this.random = Objects.requireNonNull(random, "random");
         this.newCorrelationId = Objects.requireNonNull(newCorrelationId, "newCorrelationId");
+        this.tracer = Objects.requireNonNull(tracer, "tracer");
     }
 
     /** Starts the resume sweep: now, then every {@code resumeInterval}. */
@@ -93,7 +106,8 @@ public final class BackgroundPdfGenerator implements PdfGenerationQueue {
                 return false;
             }
         }
-        scheduler.schedule(() -> attempt(documentId, correlationId, 0), Duration.ZERO);
+        Span parent = tracer.currentSpan();
+        scheduler.schedule(() -> attempt(documentId, correlationId, 0, parent), Duration.ZERO);
         return true;
     }
 
@@ -102,13 +116,17 @@ public final class BackgroundPdfGenerator implements PdfGenerationQueue {
         return inFlight.size();
     }
 
-    private void attempt(UUID documentId, String correlationId, int retries) {
+    /** @param parent span of the request that submitted the document; {@code null} for the sweep */
+    private void attempt(UUID documentId, String correlationId, int retries, Span parent) {
+        Span span = (parent == null ? tracer.nextSpan() : tracer.nextSpan(parent)).name(SPAN_NAME)
+                .tag("document.id", documentId.toString()).start();
         MDC.put(CorrelationFilter.MDC_KEY, correlationId);
-        try {
+        try (Tracer.SpanInScope scope = tracer.withSpan(span)) {
             GenerationAttempt outcome = generation.generate(documentId, correlationId);
+            span.tag("outcome", outcome.name().toLowerCase(Locale.ROOT));
             if (outcome == GenerationAttempt.RETRY) {
                 int retry = retries + 1;
-                scheduler.schedule(() -> attempt(documentId, correlationId, retry), backoff(retry));
+                scheduler.schedule(() -> attempt(documentId, correlationId, retry, parent), backoff(retry));
                 return;
             }
             if (outcome == GenerationAttempt.FAILED) {
@@ -117,9 +135,11 @@ public final class BackgroundPdfGenerator implements PdfGenerationQueue {
             inFlight.remove(documentId);
         } catch (RuntimeException e) {
             // The document keeps its stored state; the next sweep resumes it.
+            span.error(e);
             LOG.error("PDF generation attempt of document {} stopped unexpectedly", documentId, e);
             inFlight.remove(documentId);
         } finally {
+            span.end();
             MDC.remove(CorrelationFilter.MDC_KEY);
         }
     }
