@@ -11,4 +11,12 @@ public interface DocumentStorage {
      * @throws StorageUnavailableException if the URL cannot be issued
      */
     DownloadLink presignDownload(String objectKey);
+
+    /**
+     * Stores the PDF under the key, replacing it if present (ADR-015: the key derives from
+     * the document, so a retry overwrites instead of duplicating).
+     *
+     * @throws StorageUnavailableException if the object cannot be stored
+     */
+    void store(String objectKey, byte[] pdf);
 }

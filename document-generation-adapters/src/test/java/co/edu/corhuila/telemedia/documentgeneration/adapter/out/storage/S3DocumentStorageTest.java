@@ -79,6 +79,15 @@ class S3DocumentStorageTest {
     }
 
     @Test
+    void anUnreachableServerWhileStoringIsStorageUnavailable() {
+        S3DocumentStorage unreachable = new S3DocumentStorage(client("http://127.0.0.1:1"), signer,
+                "telemed-documents", Duration.ofMinutes(5), Clock.systemUTC());
+
+        assertThatThrownBy(() -> unreachable.store(KEY, new byte[] {'%', 'P', 'D', 'F'}))
+                .isInstanceOf(StorageUnavailableException.class);
+    }
+
+    @Test
     void theTimeToLiveMustBeBetweenOneSecondAndSevenDays() {
         Clock clock = Clock.systemUTC();
         assertThatThrownBy(() -> new S3DocumentStorage(client, signer, "telemed-documents", Duration.ZERO, clock))
