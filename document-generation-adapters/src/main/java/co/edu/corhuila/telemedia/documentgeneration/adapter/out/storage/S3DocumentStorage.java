@@ -1,5 +1,6 @@
 package co.edu.corhuila.telemedia.documentgeneration.adapter.out.storage;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.security.GeneralSecurityException;
@@ -17,6 +18,7 @@ import io.minio.BucketExistsArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
 import io.minio.errors.ErrorResponseException;
 import io.minio.errors.MinioException;
 import io.minio.http.Method;
@@ -33,6 +35,8 @@ public final class S3DocumentStorage implements DocumentStorage {
 
     /** Another replica created the bucket between the check and the creation. */
     private static final Set<String> ALREADY_CREATED = Set.of("BucketAlreadyOwnedByYou", "BucketAlreadyExists");
+
+    private static final String PDF_CONTENT_TYPE = "application/pdf";
 
     /** S3 limit for presigned URLs. */
     static final Duration MAX_TIME_TO_LIVE = Duration.ofDays(7);
@@ -76,6 +80,20 @@ public final class S3DocumentStorage implements DocumentStorage {
             return new DownloadLink(URI.create(url), expiresAt);
         } catch (MinioException | IOException | GeneralSecurityException e) {
             throw new StorageUnavailableException("the download URL could not be issued", e);
+        }
+    }
+
+    @Override
+    public void store(String objectKey, byte[] pdf) {
+        try {
+            client.putObject(PutObjectArgs.builder()
+                    .bucket(bucket)
+                    .object(objectKey)
+                    .stream(new ByteArrayInputStream(pdf), pdf.length, -1)
+                    .contentType(PDF_CONTENT_TYPE)
+                    .build());
+        } catch (MinioException | IOException | GeneralSecurityException e) {
+            throw new StorageUnavailableException("the PDF could not be stored", e);
         }
     }
 
