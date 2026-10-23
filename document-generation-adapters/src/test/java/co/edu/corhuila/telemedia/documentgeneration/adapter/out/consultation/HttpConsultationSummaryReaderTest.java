@@ -10,7 +10,9 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -33,6 +35,8 @@ import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpServer;
 
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.consultation.HttpConsultationSummaryReader.Settings;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.ServiceTokenException;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.ServiceTokens;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummary;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummary.Medication;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.SummaryUnavailableException;
@@ -49,7 +53,6 @@ class HttpConsultationSummaryReaderTest {
     private static final UUID PATIENT = UUID.fromString("b0000000-0000-0000-0000-000000000001");
     private static final String POST_PATH = "/api/post-summaries/" + SUMMARY;
     private static final String ATTENTION_PATH = "/api/consultations/" + CONSULTATION + "/attention";
-    private static final String TOKEN = "service-token";
     private static final String TRACE = "trace-123";
 
     private static final String POST_SUMMARY = """
@@ -74,6 +77,7 @@ class HttpConsultationSummaryReaderTest {
     private final Map<String, ConcurrentLinkedDeque<Answer>> answers = new ConcurrentHashMap<>();
     private final List<Received> received = new CopyOnWriteArrayList<>();
     private final List<Duration> waits = new ArrayList<>();
+    private final FakeTokens tokens = new FakeTokens();
 
     private record Answer(int status, String body, long delayMillis) { }
 
@@ -129,14 +133,19 @@ class HttpConsultationSummaryReaderTest {
         return URI.create("http://127.0.0.1:" + server.getAddress().getPort());
     }
 
-    private HttpConsultationSummaryReader reader(String token, int maxAttempts, double random) {
-        Settings settings = new Settings(baseUrl(), token, Duration.ofMillis(500), maxAttempts,
-                Duration.ofMillis(100), Duration.ofMillis(250));
-        return new HttpConsultationSummaryReader(HttpClient.newHttpClient(), settings, waits::add, () -> random);
+    private HttpConsultationSummaryReader reader(ServiceTokens serviceTokens, int maxAttempts, double random) {
+        Settings settings = new Settings(baseUrl(), Duration.ofMillis(500), maxAttempts, Duration.ofMillis(100),
+                Duration.ofMillis(250));
+        return new HttpConsultationSummaryReader(HttpClient.newHttpClient(), settings, serviceTokens, waits::add,
+                () -> random);
+    }
+
+    private HttpConsultationSummaryReader reader(int maxAttempts, double random) {
+        return reader(tokens, maxAttempts, random);
     }
 
     private HttpConsultationSummaryReader reader() {
-        return reader(TOKEN, 3, 1.0);
+        return reader(tokens, 3, 1.0);
     }
 
     private long requestsTo(String path) {
@@ -167,7 +176,7 @@ class HttpConsultationSummaryReaderTest {
         reader().read(SUMMARY, TRACE);
 
         assertThat(received).hasSize(2).allSatisfy(request -> {
-            assertThat(request.headers().getFirst("Authorization")).isEqualTo("Bearer " + TOKEN);
+            assertThat(request.headers().getFirst("Authorization")).isEqualTo("Bearer service-token-1");
             assertThat(request.headers().getFirst("X-Correlation-Id")).isEqualTo(TRACE);
             assertThat(request.headers().getFirst("Accept")).isEqualTo("application/json");
         });
@@ -178,7 +187,7 @@ class HttpConsultationSummaryReaderTest {
         answer(POST_PATH, ok(POST_SUMMARY));
         answer(ATTENTION_PATH, ok(ATTENTION));
 
-        reader(" ", 3, 1.0).read(SUMMARY, TRACE);
+        reader(ServiceTokens.NONE, 3, 1.0).read(SUMMARY, TRACE);
 
         assertThat(received).allSatisfy(request -> assertThat(request.headers().containsKey("Authorization")).isFalse());
     }
@@ -244,7 +253,7 @@ class HttpConsultationSummaryReaderTest {
     void retriesStopAtTheLimitWithExponentialBackoffAndFullJitter() {
         answer(POST_PATH, status(500));
 
-        assertThatThrownBy(() -> reader(TOKEN, 4, 1.0).read(SUMMARY, TRACE))
+        assertThatThrownBy(() -> reader(4, 1.0).read(SUMMARY, TRACE))
                 .isInstanceOf(SummaryUnavailableException.class);
 
         assertThat(requestsTo(POST_PATH)).isEqualTo(4);
@@ -256,7 +265,7 @@ class HttpConsultationSummaryReaderTest {
     void theJitterScalesTheWait() {
         answer(POST_PATH, status(500));
 
-        assertThatThrownBy(() -> reader(TOKEN, 3, 0.5).read(SUMMARY, TRACE))
+        assertThatThrownBy(() -> reader(3, 0.5).read(SUMMARY, TRACE))
                 .isInstanceOf(SummaryUnavailableException.class);
 
         assertThat(waits).containsExactly(Duration.ofMillis(50), Duration.ofMillis(100));
@@ -264,10 +273,10 @@ class HttpConsultationSummaryReaderTest {
 
     @Test
     void anUnreachableServiceIsRetriedAndThenUnavailable() {
-        Settings settings = new Settings(URI.create("http://127.0.0.1:1"), TOKEN, Duration.ofMillis(500), 3,
+        Settings settings = new Settings(URI.create("http://127.0.0.1:1"), Duration.ofMillis(500), 3,
                 Duration.ofMillis(100), Duration.ofMillis(250));
         HttpConsultationSummaryReader unreachable = new HttpConsultationSummaryReader(HttpClient.newHttpClient(),
-                settings, waits::add, () -> 1.0);
+                settings, tokens, waits::add, () -> 1.0);
 
         assertThatThrownBy(() -> unreachable.read(SUMMARY, TRACE)).isInstanceOf(SummaryUnavailableException.class);
 
@@ -358,15 +367,93 @@ class HttpConsultationSummaryReaderTest {
     }
 
     @Test
+    void aRejectedTokenIsRenewedOnceAndTheCallRepeatedAtOnce() {
+        answer(POST_PATH, status(401), ok(POST_SUMMARY));
+        answer(ATTENTION_PATH, ok(ATTENTION));
+
+        assertThat(reader().read(SUMMARY, TRACE).summaryId()).isEqualTo(SUMMARY);
+
+        assertThat(tokens.invalidated).containsExactly("service-token-1");
+        assertThat(received).extracting(r -> r.headers().getFirst("Authorization"))
+                .containsExactly("Bearer service-token-1", "Bearer service-token-2", "Bearer service-token-2");
+        assertThat(waits).isEmpty();
+    }
+
+    @Test
+    void aRenewedTokenThatIsAlsoRejectedIsUnavailable() {
+        answer(POST_PATH, status(401));
+
+        assertThatThrownBy(() -> reader().read(SUMMARY, TRACE)).isInstanceOf(SummaryUnavailableException.class)
+                .hasMessageContaining("401");
+
+        assertThat(requestsTo(POST_PATH)).isEqualTo(2);
+        assertThat(tokens.invalidated).hasSize(1);
+    }
+
+    @Test
+    void withoutCredentialsA401IsNotRepeated() {
+        answer(POST_PATH, status(401));
+
+        assertThatThrownBy(() -> reader(ServiceTokens.NONE, 3, 1.0).read(SUMMARY, TRACE))
+                .isInstanceOf(SummaryUnavailableException.class);
+
+        assertThat(requestsTo(POST_PATH)).isEqualTo(1);
+    }
+
+    @Test
+    void anIdentityServiceThatIsDownIsRetriedWithBackoff() {
+        tokens.failures.add(new ServiceTokenException("the identity service answered 503", true, null));
+        answer(POST_PATH, ok(POST_SUMMARY));
+        answer(ATTENTION_PATH, ok(ATTENTION));
+
+        assertThat(reader().read(SUMMARY, TRACE).summaryId()).isEqualTo(SUMMARY);
+
+        assertThat(waits).containsExactly(Duration.ofMillis(100));
+    }
+
+    @Test
+    void credentialsTheIdentityServiceRejectsAreNotRetried() {
+        tokens.failures.add(new ServiceTokenException("the identity service answered 401", false, null));
+
+        assertThatThrownBy(() -> reader().read(SUMMARY, TRACE)).isInstanceOf(SummaryUnavailableException.class)
+                .hasMessageContaining("service token");
+
+        assertThat(received).isEmpty();
+        assertThat(waits).isEmpty();
+    }
+
+    @Test
     void theSettingsAreValidated() {
         Duration second = Duration.ofSeconds(1);
-        assertThatThrownBy(() -> new Settings(URI.create("/relative"), TOKEN, second, 3, second, second))
+        assertThatThrownBy(() -> new Settings(URI.create("/relative"), second, 3, second, second))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new Settings(baseUrl(), TOKEN, Duration.ZERO, 3, second, second))
+        assertThatThrownBy(() -> new Settings(baseUrl(), Duration.ZERO, 3, second, second))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new Settings(baseUrl(), TOKEN, second, 0, second, second))
+        assertThatThrownBy(() -> new Settings(baseUrl(), second, 0, second, second))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new Settings(baseUrl(), TOKEN, second, 3, second, Duration.ofMillis(10)))
+        assertThatThrownBy(() -> new Settings(baseUrl(), second, 3, second, Duration.ofMillis(10)))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    /** Issues service-token-1, service-token-2... and renews only after a rejection. */
+    private static final class FakeTokens implements ServiceTokens {
+
+        private final List<String> invalidated = new ArrayList<>();
+        private final Deque<ServiceTokenException> failures = new ArrayDeque<>();
+        private int issued = 1;
+
+        @Override
+        public String token() {
+            if (!failures.isEmpty()) {
+                throw failures.poll();
+            }
+            return "service-token-" + issued;
+        }
+
+        @Override
+        public void invalidate(String rejected) {
+            invalidated.add(rejected);
+            issued++;
+        }
     }
 }
