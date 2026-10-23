@@ -90,12 +90,11 @@ class JdbcDocumentStatusStoreIntegrationTest {
                 .addValue("patientId", document.patientId())
                 .addValue("status", document.status().name())
                 .addValue("retryCount", document.retryCount())
-                .addValue("storageReference", document.storageReference())
-                .addValue("errorMessage", document.errorMessage())
+                .addValue("storageReference", document.storageReference().orElse(null))
+                .addValue("errorMessage", document.errorMessage().orElse(null))
                 .addValue("createdAt", OffsetDateTime.ofInstant(document.createdAt(), ZoneOffset.UTC))
-                .addValue("generatedAt", document.generatedAt() == null
-                        ? null
-                        : OffsetDateTime.ofInstant(document.generatedAt(), ZoneOffset.UTC)));
+                .addValue("generatedAt", document.generatedAt()
+                        .map(at -> OffsetDateTime.ofInstant(at, ZoneOffset.UTC)).orElse(null)));
         return document;
     }
 
@@ -136,7 +135,7 @@ class JdbcDocumentStatusStoreIntegrationTest {
         ConsultationDocument stored = stored(failed);
         assertThat(stored.status()).isEqualTo(DocumentStatus.GENERATING);
         assertThat(stored.retryCount()).isEqualTo(2);
-        assertThat(stored.errorMessage()).isNull();
+        assertThat(stored.errorMessage()).isEmpty();
     }
 
     @Test
@@ -146,7 +145,7 @@ class JdbcDocumentStatusStoreIntegrationTest {
         assertThat(store.transition(generating, generating.markFailed("storage unavailable"))).isTrue();
 
         assertThat(stored(generating).status()).isEqualTo(DocumentStatus.ERROR);
-        assertThat(stored(generating).errorMessage()).isEqualTo("storage unavailable");
+        assertThat(stored(generating).errorMessage()).contains("storage unavailable");
     }
 
     @Test
@@ -176,8 +175,8 @@ class JdbcDocumentStatusStoreIntegrationTest {
 
         ConsultationDocument stored = stored(generating);
         assertThat(stored.status()).isEqualTo(DocumentStatus.AVAILABLE);
-        assertThat(stored.storageReference()).isEqualTo(KEY);
-        assertThat(stored.generatedAt()).isEqualTo(generatedAt);
+        assertThat(stored.storageReference()).contains(KEY);
+        assertThat(stored.generatedAt()).contains(generatedAt);
         assertThat(outbox(generating)).singleElement().satisfies(row -> {
             assertThat(row)
                     .containsEntry("event_id", event.eventId())
