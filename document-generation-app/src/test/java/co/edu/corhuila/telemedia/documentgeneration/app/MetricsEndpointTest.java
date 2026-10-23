@@ -76,8 +76,9 @@ class MetricsEndpointTest {
     }
 
     @Test
-    void onlyHealthAndPrometheusAreExposed() {
-        assertThat(environment.getProperty("management.endpoints.web.exposure.include")).isEqualTo("health,prometheus");
+    void onlyHealthPrometheusAndThePauseSwitchAreExposed() {
+        assertThat(environment.getProperty("management.endpoints.web.exposure.include")).isEqualTo(
+                "health,prometheus,generation");
         assertThat(restTemplate.getForEntity("http://localhost:" + managementPort + "/actuator/env", String.class)
                 .getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
     }
