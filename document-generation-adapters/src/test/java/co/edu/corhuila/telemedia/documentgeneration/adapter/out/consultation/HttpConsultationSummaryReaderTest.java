@@ -22,6 +22,12 @@ import java.util.concurrent.Executors;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpServer;
@@ -329,6 +335,26 @@ class HttpConsultationSummaryReaderTest {
         answer(ATTENTION_PATH, ok(ATTENTION.replace(CONSULTATION.toString(), UUID.randomUUID().toString())));
 
         assertThatThrownBy(() -> reader().read(SUMMARY, TRACE)).isInstanceOf(SummaryUnavailableException.class);
+    }
+
+    @Test
+    void aSummaryThatCannotBeReadIsLoggedWithTheReasonButNeverTheBody() {
+        answer(POST_PATH, status(404));
+        Logger logger = (Logger) LoggerFactory.getLogger(HttpConsultationSummaryReader.class);
+        ListAppender<ILoggingEvent> logs = new ListAppender<>();
+        logs.start();
+        logger.addAppender(logs);
+        try {
+            assertThatThrownBy(() -> reader().read(SUMMARY, TRACE)).isInstanceOf(SummaryUnavailableException.class);
+        } finally {
+            logger.detachAppender(logs);
+        }
+
+        assertThat(logs.list).singleElement().satisfies(event -> {
+            assertThat(event.getLevel()).isEqualTo(Level.WARN);
+            assertThat(event.getFormattedMessage()).contains(SUMMARY.toString(), "answered 404")
+                    .doesNotContain("confidential");
+        });
     }
 
     @Test
