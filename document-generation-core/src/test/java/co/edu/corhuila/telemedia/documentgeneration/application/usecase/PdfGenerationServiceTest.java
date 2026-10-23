@@ -21,6 +21,7 @@ import co.edu.corhuila.telemedia.documentgeneration.application.port.out.Consult
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummaryReader;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.DocumentStatusStore;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.DocumentStorage;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.GenerationMetrics;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfGeneratedEvent;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfRenderer;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfRenderingException;
@@ -49,8 +50,9 @@ class PdfGenerationServiceTest {
     private final StubReader reader = new StubReader();
     private final StubRenderer renderer = new StubRenderer();
     private final RecordingStorage storage = new RecordingStorage();
+    private final RecordingMetrics metrics = new RecordingMetrics();
     private final PdfGenerationService service = new PdfGenerationService(repository, statusStore, reader,
-            renderer, storage, () -> EVENT, clock, Duration.ofSeconds(30));
+            renderer, storage, () -> EVENT, metrics, clock, Duration.ofSeconds(30));
 
     private ConsultationDocument pending() {
         ConsultationDocument document = ConsultationDocument.request(UUID.randomUUID(), SUMMARY, PATIENT, T0);
@@ -260,6 +262,52 @@ class PdfGenerationServiceTest {
 
         ConsultationDocument last() {
             return transitions.get(transitions.size() - 1).to();
+        }
+    }
+
+    @Test
+    void anAvailableDocumentRecordsTheAttemptAndHowLongThePatientWaited() {
+        ConsultationDocument document = pending();
+        reader.summary = summary(PATIENT);
+        reader.onRead = () -> clock.advance(Duration.ofSeconds(3));
+
+        service.generate(document.id(), TRACE);
+
+        assertThat(metrics.attempts).containsExactly(GenerationAttempt.AVAILABLE + " PT3S");
+        assertThat(metrics.available).containsExactly(Duration.ofSeconds(3));
+    }
+
+    @Test
+    void aFailedAttemptRecordsItsOutcomeAndNoAvailability() {
+        ConsultationDocument document = pending();
+        reader.failure = new SummaryUnavailableException("consultation-api 503", null);
+
+        service.generate(document.id(), TRACE);
+
+        assertThat(metrics.attempts).containsExactly(GenerationAttempt.RETRY + " PT0S");
+        assertThat(metrics.available).isEmpty();
+    }
+
+    @Test
+    void aSkippedAttemptIsRecordedToo() {
+        service.generate(UUID.randomUUID(), TRACE);
+
+        assertThat(metrics.attempts).containsExactly(GenerationAttempt.SKIPPED + " PT0S");
+    }
+
+    private static final class RecordingMetrics implements GenerationMetrics {
+
+        private final List<String> attempts = new ArrayList<>();
+        private final List<Duration> available = new ArrayList<>();
+
+        @Override
+        public void attemptFinished(GenerationAttempt outcome, Duration duration) {
+            attempts.add(outcome + " " + duration);
+        }
+
+        @Override
+        public void documentAvailable(Duration sinceRequested) {
+            available.add(sinceRequested);
         }
     }
 
