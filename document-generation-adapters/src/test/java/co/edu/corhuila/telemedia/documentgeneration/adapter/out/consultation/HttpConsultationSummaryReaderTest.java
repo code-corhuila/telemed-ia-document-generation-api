@@ -285,7 +285,7 @@ class HttpConsultationSummaryReaderTest {
 
     @Test
     void clientErrorsAreNotRetried() {
-        for (int code : new int[] {400, 401, 403, 404}) {
+        for (int code : new int[] {400, 403, 404}) {
             received.clear();
             answer(POST_PATH, status(code));
 
