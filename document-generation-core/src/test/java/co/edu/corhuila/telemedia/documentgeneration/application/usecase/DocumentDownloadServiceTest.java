@@ -124,5 +124,10 @@ class DocumentDownloadServiceTest {
             }
             return link;
         }
+
+        @Override
+        public void store(String objectKey, byte[] pdf) {
+            throw new UnsupportedOperationException("downloads never store");
+        }
     }
 }
