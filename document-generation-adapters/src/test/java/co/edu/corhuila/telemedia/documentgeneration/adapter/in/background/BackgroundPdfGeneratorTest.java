@@ -8,11 +8,21 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.LoggerFactory;
+
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
 
 import io.micrometer.tracing.Span;
 import io.micrometer.tracing.Tracer;
@@ -39,8 +49,21 @@ class BackgroundPdfGeneratorTest {
     private final BackgroundPdfGenerator generator = new BackgroundPdfGenerator(generation, SETTINGS, scheduler,
             () -> random, () -> "run-" + ++correlations);
     private final SimpleTracer tracer = new SimpleTracer();
+    private final Logger logger = (Logger) LoggerFactory.getLogger(BackgroundPdfGenerator.class);
+    private final ListAppender<ILoggingEvent> logs = new ListAppender<>();
     private final BackgroundPdfGenerator tracedGenerator = new BackgroundPdfGenerator(generation, SETTINGS,
             scheduler, () -> random, () -> "run-" + ++correlations, tracer);
+
+    @BeforeEach
+    void captureLogs() {
+        logs.start();
+        logger.addAppender(logs);
+    }
+
+    @AfterEach
+    void releaseLogs() {
+        logger.detachAppender(logs);
+    }
 
     @Test
     void aSubmittedDocumentIsGeneratedRightAwayWithItsCorrelationId() {
@@ -245,6 +268,75 @@ class BackgroundPdfGeneratorTest {
             assertThat(attempt.getError()).isSameAs(generation.failure);
             assertThat(attempt.getEndTimestamp()).isAfterOrEqualTo(attempt.getStartTimestamp());
         });
+    }
+
+    @Test
+    void eachAttemptLogsItsStartAndItsOutcomeAsDomainEvents() {
+        UUID document = UUID.randomUUID();
+        generation.outcomes(document, GenerationAttempt.RETRY, GenerationAttempt.AVAILABLE);
+
+        generator.submit(document, "trace-1");
+        scheduler.runAll();
+
+        List<Map<String, Object>> events = events();
+        assertThat(events).extracting(event -> event.get("event")).containsExactly("document.generation.started",
+                "document.generation.retry_scheduled", "document.generation.started", "document.generation.available");
+        assertThat(events).extracting(event -> event.get("status")).containsExactly("GENERATING", "ERROR",
+                "GENERATING", "AVAILABLE");
+        assertThat(events).extracting(event -> event.get("attempt")).containsExactly(1, 1, 2, 2);
+        assertThat(events).allSatisfy(event -> assertThat(event).containsEntry("document_id", document.toString()));
+        assertThat(events.get(1).get("duration_ms")).isInstanceOf(Long.class);
+        assertThat(events.get(3).get("duration_ms")).isInstanceOf(Long.class);
+    }
+
+    @Test
+    void aDocumentWithNoRetryLeftLogsFailedAsAWarning() {
+        UUID document = UUID.randomUUID();
+        generation.outcomes(document, GenerationAttempt.FAILED);
+
+        generator.submit(document, "trace-1");
+        scheduler.runAll();
+
+        ILoggingEvent failed = logs.list.get(logs.list.size() - 1);
+        assertThat(failed.getLevel()).isEqualTo(Level.WARN);
+        assertThat(events().get(1)).containsEntry("event", "document.generation.failed").containsEntry("status", "ERROR")
+                .containsKey("duration_ms");
+    }
+
+    @Test
+    void skippedAndInterruptedAttemptsAreLoggedWithoutAGuessedStatus() {
+        UUID skipped = UUID.randomUUID();
+        generation.outcomes(skipped, GenerationAttempt.SKIPPED);
+        generator.submit(skipped, "trace-1");
+        scheduler.runAll();
+        generation.failure = new IllegalStateException("database down");
+        generator.submit(UUID.randomUUID(), "trace-2");
+        scheduler.runAll();
+
+        assertThat(events()).extracting(event -> event.get("event")).containsExactly("document.generation.started",
+                "document.generation.skipped", "document.generation.started", "document.generation.interrupted");
+        assertThat(events().get(1)).doesNotContainKey("status");
+        assertThat(events().get(3)).doesNotContainKey("status");
+    }
+
+    @Test
+    void domainEventsCarryOnlyIdentifiersStateAndTiming() {
+        generation.outcomes(UUID.randomUUID(), GenerationAttempt.RETRY);
+
+        generator.submit(UUID.randomUUID(), "trace-1");
+        scheduler.runAll();
+
+        assertThat(events()).isNotEmpty().allSatisfy(event -> assertThat(event.keySet())
+                .isSubsetOf(Set.of("event", "document_id", "status", "duration_ms", "attempt")));
+    }
+
+    /** The key-value pairs of each log line that names a domain event. */
+    private List<Map<String, Object>> events() {
+        return logs.list.stream().filter(line -> line.getKeyValuePairs() != null).map(line -> {
+            Map<String, Object> fields = new LinkedHashMap<>();
+            line.getKeyValuePairs().forEach(pair -> fields.put(pair.key, pair.value));
+            return fields;
+        }).filter(fields -> fields.containsKey("event")).toList();
     }
 
     private List<SimpleSpan> attempts() {
