@@ -67,6 +67,7 @@ public final class PdfGenerationService implements DocumentPdfGeneration {
 
     @Override
     public GenerationAttempt generate(UUID documentId, String correlationId) {
+        Objects.requireNonNull(correlationId, "correlationId");
         Optional<ConsultationDocument> found = repository.findById(Objects.requireNonNull(documentId, "documentId"));
         if (found.isEmpty()) {
             return GenerationAttempt.SKIPPED;
@@ -77,7 +78,7 @@ public final class PdfGenerationService implements DocumentPdfGeneration {
         }
         Instant deadline = clock.instant().plus(attemptTimeout);
         try {
-            ConsultationSummary summary = summaries.read(generating.summaryId());
+            ConsultationSummary summary = summaries.read(generating.summaryId(), correlationId);
             checkDeadline(deadline);
             if (!summary.patientId().equals(generating.patientId()) || !summary.summaryId().equals(generating.summaryId())) {
                 throw new AttemptFailed(SUMMARY_MISMATCH);
@@ -90,7 +91,7 @@ public final class PdfGenerationService implements DocumentPdfGeneration {
             Instant generatedAt = clock.instant();
             ConsultationDocument available = generating.markAvailable(key, generatedAt);
             PdfGeneratedEvent event = new PdfGeneratedEvent(ids.newId(), generating.id(), generating.summaryId(),
-                    generating.patientId(), generatedAt, Objects.requireNonNull(correlationId, "correlationId"));
+                    generating.patientId(), generatedAt, correlationId);
             return statusStore.complete(generating, available, event)
                     ? GenerationAttempt.AVAILABLE
                     : GenerationAttempt.SKIPPED;
