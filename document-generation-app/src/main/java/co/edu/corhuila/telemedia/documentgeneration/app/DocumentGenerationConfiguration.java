@@ -53,6 +53,9 @@ import co.edu.corhuila.telemedia.documentgeneration.application.usecase.Document
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.PdfGenerationService;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.java11.instrument.binder.jdk.MicrometerHttpClient;
+import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.tracing.Tracer;
 import io.minio.MinioClient;
 
 /**
@@ -114,13 +117,15 @@ public class DocumentGenerationConfiguration {
             @Value("${identity.client-id}") String clientId,
             @Value("${identity.client-secret}") String clientSecret,
             @Value("${identity.request-timeout-ms}") long requestTimeoutMs,
-            @Value("${identity.refresh-margin-seconds}") long refreshMarginSeconds, Clock clock) {
+            @Value("${identity.refresh-margin-seconds}") long refreshMarginSeconds, Clock clock,
+            MeterRegistry meters, ObservationRegistry observations) {
         if (clientSecret == null || clientSecret.isBlank()) {
             LOG.warn("SERVICE_CLIENT_SECRET is not set: consultation summaries cannot be read");
             return ServiceTokens.NONE;
         }
         Duration requestTimeout = Duration.ofMillis(requestTimeoutMs);
-        HttpClient http = HttpClient.newBuilder().connectTimeout(requestTimeout).build();
+        HttpClient http = traced(HttpClient.newBuilder().connectTimeout(requestTimeout).build(), meters,
+                observations);
         return new IdentityServiceTokens(http, new IdentityServiceTokens.Settings(URI.create(identityUrl), clientId,
                 clientSecret, requestTimeout, Duration.ofSeconds(refreshMarginSeconds)), clock);
     }
@@ -131,12 +136,22 @@ public class DocumentGenerationConfiguration {
             @Value("${consultation.request-timeout-ms}") long requestTimeoutMs,
             @Value("${consultation.max-attempts}") int maxAttempts,
             @Value("${consultation.backoff-base-ms}") long backoffBaseMs,
-            @Value("${consultation.backoff-cap-ms}") long backoffCapMs) {
+            @Value("${consultation.backoff-cap-ms}") long backoffCapMs, MeterRegistry meters,
+            ObservationRegistry observations) {
         Duration requestTimeout = Duration.ofMillis(requestTimeoutMs);
-        HttpClient http = HttpClient.newBuilder().connectTimeout(requestTimeout).build();
+        HttpClient http = traced(HttpClient.newBuilder().connectTimeout(requestTimeout).build(), meters,
+                observations);
         return new HttpConsultationSummaryReader(http, new HttpConsultationSummaryReader.Settings(
                 URI.create(baseUrl), requestTimeout, maxAttempts, Duration.ofMillis(backoffBaseMs),
                 Duration.ofMillis(backoffCapMs)), serviceTokens);
+    }
+
+    /**
+     * OBS-DG-02: each outgoing call is a client span and sends the W3C {@code traceparent} of
+     * the current trace, so identity and Medical Consultation continue it.
+     */
+    private static HttpClient traced(HttpClient client, MeterRegistry meters, ObservationRegistry observations) {
+        return MicrometerHttpClient.instrumentationBuilder(client, meters).observationRegistry(observations).build();
     }
 
     @Bean
@@ -178,13 +193,13 @@ public class DocumentGenerationConfiguration {
             @Value("${generation.resume-batch-size}") int resumeBatchSize,
             @Value("${generation.resume-interval-seconds}") long resumeIntervalSeconds,
             @Value("${generation.retry-backoff-base-ms}") long backoffBaseMs,
-            @Value("${generation.retry-backoff-cap-ms}") long backoffCapMs) {
+            @Value("${generation.retry-backoff-cap-ms}") long backoffCapMs, Tracer tracer) {
         BackgroundPdfGenerator.Settings settings = new BackgroundPdfGenerator.Settings(maxInFlight,
                 resumeBatchSize, Duration.ofSeconds(resumeIntervalSeconds), Duration.ofMillis(backoffBaseMs),
                 Duration.ofMillis(backoffCapMs));
         return new BackgroundPdfGenerator(generation, settings,
                 (task, delay) -> pdfGenerationExecutor.schedule(task, delay.toMillis(), TimeUnit.MILLISECONDS),
-                () -> ThreadLocalRandom.current().nextDouble(), () -> UUID.randomUUID().toString());
+                () -> ThreadLocalRandom.current().nextDouble(), () -> UUID.randomUUID().toString(), tracer);
     }
 
     /** Saturation signal: documents queued or waiting for a retry (week 11 workshop). */
