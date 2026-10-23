@@ -18,6 +18,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.background.BackgroundPdfGenerator;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.background.SchedulingDocumentGeneration;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.consultation.HttpConsultationSummaryReader;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.ServiceTokens;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.pdf.PdfBoxRenderer;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcConsultationDocumentRepository;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcDocumentStatusStore;
@@ -96,6 +97,8 @@ class DocumentGenerationApplicationTest {
         assertThat(context.getBean(DocumentPdfGeneration.class)).isInstanceOf(PdfGenerationService.class);
         assertThat(context.getBean(DocumentStatusStore.class)).isInstanceOf(JdbcDocumentStatusStore.class);
         assertThat(context.getBean(ConsultationSummaryReader.class)).isInstanceOf(HttpConsultationSummaryReader.class);
+        // No client secret in these tests: calls go without a token.
+        assertThat(context.getBean(ServiceTokens.class)).isSameAs(ServiceTokens.NONE);
         assertThat(context.getBean(PdfRenderer.class)).isInstanceOf(PdfBoxRenderer.class);
         assertThat(context.getBean(BackgroundPdfGenerator.class)).isNotNull();
         assertThat(context.getBean(DocumentStorage.class)).isInstanceOf(S3DocumentStorage.class);
@@ -119,11 +122,20 @@ class DocumentGenerationApplicationTest {
     void consultationClientLimitsAreDeclared() {
         // Norma 5.7.2: bounded retries with backoff; the token is never versioned.
         assertThat(environment.getProperty("consultation.base-url")).isEqualTo("http://localhost:8081");
-        assertThat(environment.getProperty("consultation.service-token")).isEmpty();
         assertThat(environment.getProperty("consultation.request-timeout-ms")).isEqualTo("5000");
         assertThat(environment.getProperty("consultation.max-attempts")).isEqualTo("3");
         assertThat(environment.getProperty("consultation.backoff-base-ms")).isEqualTo("200");
         assertThat(environment.getProperty("consultation.backoff-cap-ms")).isEqualTo("2000");
+    }
+
+    @Test
+    void identityClientSettingsAreDeclared() {
+        // identity-and-access-api #117: 10-minute tokens without refresh, renewed a minute before.
+        assertThat(environment.getProperty("identity.base-url")).isEqualTo("http://localhost:8082");
+        assertThat(environment.getProperty("identity.client-id")).isEqualTo("document-generation");
+        assertThat(environment.getProperty("identity.client-secret")).isEmpty();
+        assertThat(environment.getProperty("identity.request-timeout-ms")).isEqualTo("5000");
+        assertThat(environment.getProperty("identity.refresh-margin-seconds")).isEqualTo("60");
     }
 
     @Test
