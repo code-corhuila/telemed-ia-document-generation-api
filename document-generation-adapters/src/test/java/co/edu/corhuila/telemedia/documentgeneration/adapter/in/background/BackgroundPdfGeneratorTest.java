@@ -330,6 +330,69 @@ class BackgroundPdfGeneratorTest {
                 .isSubsetOf(Set.of("event", "document_id", "status", "duration_ms", "attempt")));
     }
 
+    @Test
+    void whilePausedASubmissionIsLeftPendingAndNoAttemptRuns() {
+        generator.pause();
+
+        assertThat(generator.submit(UUID.randomUUID(), "trace-1")).isFalse();
+
+        assertThat(scheduler.pending()).isZero();
+        assertThat(generation.calls).isEmpty();
+        assertThat(generator.isPaused()).isTrue();
+    }
+
+    @Test
+    void aPauseStopsQueuedAttemptsAndWaitingRetriesAndReleasesThemForTheSweep() {
+        UUID retrying = UUID.randomUUID();
+        UUID queued = UUID.randomUUID();
+        generation.outcomes(retrying, GenerationAttempt.RETRY, GenerationAttempt.AVAILABLE);
+        generator.submit(retrying, "trace-1");
+        scheduler.runNext();
+        generator.submit(queued, "trace-2");
+
+        generator.pause();
+        scheduler.runAll();
+
+        assertThat(generation.calls).containsExactly(new Call(retrying, "trace-1"));
+        assertThat(generator.inFlight()).isZero();
+        assertThat(events()).extracting(event -> event.get("event")).endsWith("document.generation.deferred",
+                "document.generation.deferred");
+    }
+
+    @Test
+    void whilePausedTheSweepDoesNotLookForDocumentsButKeepsItsSchedule() {
+        generation.resumable = List.of(UUID.randomUUID());
+        generator.pause();
+
+        generator.start();
+        scheduler.runNext();
+
+        assertThat(generation.resumableLimits).isEmpty();
+        assertThat(scheduler.delays()).containsExactly(SETTINGS.resumeInterval());
+    }
+
+    @Test
+    void resumingSweepsAtOnceSoEveryWaitingDocumentIsPickedUp() {
+        UUID waiting = UUID.randomUUID();
+        generation.resumable = List.of(waiting);
+        generator.pause();
+
+        generator.resume();
+        scheduler.runAll();
+
+        assertThat(generator.isPaused()).isFalse();
+        assertThat(generation.calls).containsExactly(new Call(waiting, "run-1"));
+        // A one-off sweep: the periodic one is started only by start().
+        assertThat(scheduler.pending()).isZero();
+    }
+
+    @Test
+    void resumingWhenNotPausedChangesNothing() {
+        generator.resume();
+
+        assertThat(scheduler.pending()).isZero();
+    }
+
     /** The key-value pairs of each log line that names a domain event. */
     private List<Map<String, Object>> events() {
         return logs.list.stream().filter(line -> line.getKeyValuePairs() != null).map(line -> {
