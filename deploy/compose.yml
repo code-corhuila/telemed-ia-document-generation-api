@@ -31,8 +31,12 @@ services:
       # Medical Consultation, read through its API inside the platform network
       # (DEC-006): service and port of telemed-ia-medical-consultation-api.
       CONSULTATION_BASE_URL: "${CONSULTATION_BASE_URL:-http://medical-consultation-api:8080}"
-      # Service token issued by the identity service (norma 5.7); empty until it exists.
-      CONSULTATION_SERVICE_TOKEN: "${DOCUMENT_GENERATION_SERVICE_TOKEN:-}"
+      # Service token from the identity service (norma 5.7, identity-and-access-api
+      # #117): service identity-api, port 8081, reachable only inside the platform network.
+      IDENTITY_URL: "${IDENTITY_URL:-http://identity-api:8081}"
+      SERVICE_CLIENT_ID: "${DOCUMENT_GENERATION_SERVICE_CLIENT_ID:-document-generation}"
+      # Delivered privately by the identity owner; lives only in env/<environment>.env.
+      SERVICE_CLIENT_SECRET: "${DOCUMENT_GENERATION_SERVICE_CLIENT_SECRET:-}"
     expose:
       - "8080"
     networks:
