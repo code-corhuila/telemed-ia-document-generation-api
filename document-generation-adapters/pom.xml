@@ -47,6 +47,11 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-core</artifactId>
         </dependency>
+        <!-- Background attempts as child spans of the request (OBS-DG-02); the tracer lives in the app. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing</artifactId>
+        </dependency>
         <!-- Outbound PDF rendering (DEC-006). spring-jcl already provides the logging API. -->
         <dependency>
             <groupId>org.apache.pdfbox</groupId>
@@ -62,6 +67,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

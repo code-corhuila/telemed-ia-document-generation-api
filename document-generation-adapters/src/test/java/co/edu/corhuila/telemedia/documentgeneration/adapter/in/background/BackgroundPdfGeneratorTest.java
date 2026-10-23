@@ -14,6 +14,11 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
+import io.micrometer.tracing.Span;
+import io.micrometer.tracing.Tracer;
+import io.micrometer.tracing.test.simple.SimpleSpan;
+import io.micrometer.tracing.test.simple.SimpleTracer;
+
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.background.BackgroundPdfGenerator.Settings;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentPdfGeneration;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.GenerationAttempt;
@@ -33,6 +38,9 @@ class BackgroundPdfGeneratorTest {
     private double random = 1.0;
     private final BackgroundPdfGenerator generator = new BackgroundPdfGenerator(generation, SETTINGS, scheduler,
             () -> random, () -> "run-" + ++correlations);
+    private final SimpleTracer tracer = new SimpleTracer();
+    private final BackgroundPdfGenerator tracedGenerator = new BackgroundPdfGenerator(generation, SETTINGS,
+            scheduler, () -> random, () -> "run-" + ++correlations, tracer);
 
     @Test
     void aSubmittedDocumentIsGeneratedRightAwayWithItsCorrelationId() {
@@ -182,6 +190,68 @@ class BackgroundPdfGeneratorTest {
     }
 
     @Test
+    void eachAttemptIsAChildSpanOfTheRequestThatSubmittedIt() {
+        UUID document = UUID.randomUUID();
+        generation.outcomes(document, GenerationAttempt.RETRY, GenerationAttempt.AVAILABLE);
+        Span request = tracer.nextSpan().name("http post /api/documents/generate").start();
+        try (Tracer.SpanInScope scope = tracer.withSpan(request)) {
+            tracedGenerator.submit(document, "trace-1");
+        }
+        request.end();
+
+        scheduler.runAll();
+
+        List<SimpleSpan> attempts = attempts();
+        assertThat(attempts).hasSize(2).allSatisfy(attempt -> {
+            assertThat(attempt.getTraceId()).isEqualTo(request.context().traceId());
+            assertThat(attempt.getParentId()).isEqualTo(request.context().spanId());
+            assertThat(attempt.getTags()).containsEntry("document.id", document.toString());
+            assertThat(attempt.getEndTimestamp()).isAfterOrEqualTo(attempt.getStartTimestamp());
+        });
+        assertThat(attempts).extracting(attempt -> attempt.getTags().get("outcome")).containsExactly("retry",
+                "available");
+    }
+
+    @Test
+    void theAttemptSpanIsCurrentWhileTheDocumentIsGenerated() {
+        generation.tracer = tracer;
+
+        tracedGenerator.submit(UUID.randomUUID(), "trace-1");
+        scheduler.runAll();
+
+        assertThat(generation.spansSeen).containsExactly(attempts().get(0).getSpanId());
+        assertThat(tracer.currentSpan()).isNull();
+    }
+
+    @Test
+    void aDocumentResumedBySweepStartsItsOwnTrace() {
+        generation.resumable = List.of(UUID.randomUUID());
+
+        tracedGenerator.start();
+        scheduler.runNext();
+        scheduler.runAllExcept(SETTINGS.resumeInterval());
+
+        assertThat(attempts()).singleElement().satisfies(attempt -> assertThat(attempt.getParentId()).isNullOrEmpty());
+    }
+
+    @Test
+    void anAttemptThatThrowsEndsItsSpanWithTheError() {
+        generation.failure = new IllegalStateException("database down");
+
+        tracedGenerator.submit(UUID.randomUUID(), "trace-1");
+        scheduler.runAll();
+
+        assertThat(attempts()).singleElement().satisfies(attempt -> {
+            assertThat(attempt.getError()).isSameAs(generation.failure);
+            assertThat(attempt.getEndTimestamp()).isAfterOrEqualTo(attempt.getStartTimestamp());
+        });
+    }
+
+    private List<SimpleSpan> attempts() {
+        return tracer.getSpans().stream().filter(span -> "pdf generation attempt".equals(span.getName())).toList();
+    }
+
+    @Test
     void theSettingsAreValidated() {
         Duration second = Duration.ofSeconds(1);
         assertThatThrownBy(() -> new Settings(0, 10, second, second, second))
@@ -204,6 +274,8 @@ class BackgroundPdfGeneratorTest {
         private List<UUID> resumable = List.of();
         private RuntimeException failure;
         private RuntimeException resumableFailure;
+        private Tracer tracer;
+        private final List<String> spansSeen = new ArrayList<>();
 
         void outcomes(UUID document, GenerationAttempt... sequence) {
             outcomes.put(document, new ArrayDeque<>(List.of(sequence)));
@@ -216,6 +288,9 @@ class BackgroundPdfGeneratorTest {
         @Override
         public GenerationAttempt generate(UUID documentId, String correlationId) {
             calls.add(new Call(documentId, correlationId));
+            if (tracer != null) {
+                spansSeen.add(tracer.currentSpan().context().spanId());
+            }
             if (failure != null) {
                 throw failure;
             }
