@@ -7,6 +7,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.DoubleSupplier;
 import java.util.function.Supplier;
 
@@ -38,6 +39,9 @@ import io.micrometer.tracing.Tracer;
  *   <li>each attempt logs its start and its outcome as domain events, with the fields of the
  *       log contract: {@code event}, {@code document_id}, {@code status}, {@code duration_ms}
  *       and the {@code attempt} number; never clinical content (OBS-DG-03).</li>
+ *   <li>generation can be paused without stopping the service, while a dependency is down
+ *       (OBS-DG-06): no attempt runs, documents wait in their stored state without spending
+ *       retries, and resuming sweeps at once.</li>
  * </ul>
  * Waiting retries live in memory only: after a restart the sweep finds them again.
  */
@@ -81,6 +85,7 @@ public final class BackgroundPdfGenerator implements PdfGenerationQueue {
     private final Supplier<String> newCorrelationId;
     private final Tracer tracer;
     private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
+    private final AtomicBoolean paused = new AtomicBoolean();
 
     public BackgroundPdfGenerator(DocumentPdfGeneration generation, Settings settings, Scheduler scheduler,
             DoubleSupplier random, Supplier<String> newCorrelationId) {
@@ -106,6 +111,9 @@ public final class BackgroundPdfGenerator implements PdfGenerationQueue {
     public boolean submit(UUID documentId, String correlationId) {
         Objects.requireNonNull(documentId, "documentId");
         Objects.requireNonNull(correlationId, "correlationId");
+        if (paused.get()) {
+            return false;
+        }
         synchronized (inFlight) {
             if (inFlight.size() >= settings.maxInFlight() || !inFlight.add(documentId)) {
                 return false;
@@ -121,8 +129,37 @@ public final class BackgroundPdfGenerator implements PdfGenerationQueue {
         return inFlight.size();
     }
 
+    /**
+     * Stops new attempts. Queued attempts and waiting retries are dropped when their turn
+     * comes; the documents keep their stored state for the sweep after {@link #resume()}.
+     */
+    public void pause() {
+        if (!paused.getAndSet(true)) {
+            LOG.warn("PDF generation paused");
+        }
+    }
+
+    /** Lets attempts run again and sweeps at once for the documents that waited. */
+    public void resume() {
+        if (paused.getAndSet(false)) {
+            LOG.info("PDF generation resumed");
+            scheduler.schedule(this::resumeWaiting, Duration.ZERO);
+        }
+    }
+
+    public boolean isPaused() {
+        return paused.get();
+    }
+
     /** @param parent span of the request that submitted the document; {@code null} for the sweep */
     private void attempt(UUID documentId, String correlationId, int retries, Span parent) {
+        if (paused.get()) {
+            // Dropped without an attempt, so no retry is spent; the sweep resumes it later.
+            inFlight.remove(documentId);
+            event(Level.INFO, "document.generation.deferred", documentId, retries + 1)
+                    .log("PDF generation of document {} deferred: generation is paused", documentId);
+            return;
+        }
         Span span = (parent == null ? tracer.nextSpan() : tracer.nextSpan(parent)).name(SPAN_NAME)
                 .tag("document.id", documentId.toString()).start();
         MDC.put(CorrelationFilter.MDC_KEY, correlationId);
@@ -191,6 +228,16 @@ public final class BackgroundPdfGenerator implements PdfGenerationQueue {
 
     private void sweep() {
         try {
+            if (!paused.get()) {
+                resumeWaiting();
+            }
+        } finally {
+            scheduler.schedule(this::sweep, settings.resumeInterval());
+        }
+    }
+
+    private void resumeWaiting() {
+        try {
             List<UUID> resumable = generation.resumable(settings.resumeBatchSize());
             for (UUID documentId : resumable) {
                 if (!inFlight.contains(documentId)) {
@@ -199,8 +246,6 @@ public final class BackgroundPdfGenerator implements PdfGenerationQueue {
             }
         } catch (RuntimeException e) {
             LOG.error("the resume sweep of PDF generation failed; it runs again later", e);
-        } finally {
-            scheduler.schedule(this::sweep, settings.resumeInterval());
         }
     }
 }
