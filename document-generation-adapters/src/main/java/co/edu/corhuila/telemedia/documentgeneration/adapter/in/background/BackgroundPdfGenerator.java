@@ -97,7 +97,8 @@ public final class BackgroundPdfGenerator implements PdfGenerationQueue {
         return true;
     }
 
-    int inFlight() {
+    /** Documents queued or waiting for a retry: the saturation of the generation. */
+    public int inFlight() {
         return inFlight.size();
     }
 
