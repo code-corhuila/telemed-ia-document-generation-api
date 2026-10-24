@@ -36,6 +36,40 @@ class DocumentGenerationServiceTest {
     }
 
     @Test
+    void anAllowedServiceRequestsTheGenerationWithTheEventIdAsKey() {
+        DocumentGenerationService withWorker = new DocumentGenerationService(
+                store, UUID::randomUUID, Clock.fixed(NOW, ZoneOffset.UTC), Set.of("worker"));
+        Caller worker = new Caller("worker", Set.of(Caller.SERVICE));
+
+        GenerationResult first = withWorker.request(worker, command("event-0000001", SUMMARY, PATIENT));
+        GenerationResult redelivered = withWorker.request(worker, command("event-0000001", SUMMARY, PATIENT));
+
+        assertThat(first.created()).isTrue();
+        assertThat(redelivered.created()).isFalse();
+        assertThat(redelivered.document().id()).isEqualTo(first.document().id());
+    }
+
+    @Test
+    void aServiceOutsideTheAllowedClientsIsDenied() {
+        DocumentGenerationService withWorker = new DocumentGenerationService(
+                store, UUID::randomUUID, Clock.fixed(NOW, ZoneOffset.UTC), Set.of("worker"));
+
+        assertThatThrownBy(() -> withWorker.request(new Caller("notifications", Set.of(Caller.SERVICE)),
+                command("key-00000001", SUMMARY, PATIENT))).isInstanceOf(DocumentAccessDeniedException.class);
+        assertThatThrownBy(() -> service.request(new Caller("worker", Set.of(Caller.SERVICE)),
+                command("key-00000001", SUMMARY, PATIENT))).isInstanceOf(DocumentAccessDeniedException.class);
+        assertThat(store.documentCount()).isZero();
+    }
+
+    @Test
+    void anAdministratorStillRequestsTheGenerationWhenServicesAreAllowed() {
+        DocumentGenerationService withWorker = new DocumentGenerationService(
+                store, UUID::randomUUID, Clock.fixed(NOW, ZoneOffset.UTC), Set.of("worker"));
+
+        assertThat(withWorker.request(ADMIN, command("key-00000001", SUMMARY, PATIENT)).created()).isTrue();
+    }
+
+    @Test
     void aNewKeyCreatesThePendingDocument() {
         GenerationResult result = service.request(ADMIN, command("key-00000001", SUMMARY, PATIENT));
 

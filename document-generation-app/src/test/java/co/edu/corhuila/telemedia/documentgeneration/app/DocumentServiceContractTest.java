@@ -252,6 +252,22 @@ class DocumentServiceContractTest {
         }
 
         @Test
+        void theWorkerRequestsAGenerationWithItsServiceToken() throws Exception {
+            Reply reply = send(as("worker", "SERVICE", post(BASE + "/generate", body(UUID.randomUUID().toString(), patient))
+                    .header("Idempotency-Key", "event-" + UUID.randomUUID())));
+
+            assertThat(reply.status()).isEqualTo(201);
+            created.add(reply.json().get("id").asText());
+        }
+
+        @Test
+        void anotherServiceCannotRequestAGeneration() throws Exception {
+            assertError(send(as("notifications", "SERVICE", post(BASE + "/generate",
+                    body(UUID.randomUUID().toString(), patient))
+                    .header("Idempotency-Key", "event-" + UUID.randomUUID()))), 403, "FORBIDDEN");
+        }
+
+        @Test
         void aPatientCannotRequestAGeneration() throws Exception {
             assertError(send(asPatient(post(BASE + "/generate", body(UUID.randomUUID().toString(), patient))
                     .header("Idempotency-Key", "contract-" + UUID.randomUUID()))), 403, "FORBIDDEN");
