@@ -39,6 +39,9 @@ storage:
 
 # DEC-005, DEC-006: PDF generation runs in the background inside this service.
 generation:
+  # Services allowed to request a generation with their own token (DEC-007, ADR-022):
+  # client ids, comma separated. The consumer of PostConsultationSummaryGenerated.
+  service-clients: ${GENERATION_SERVICE_CLIENTS:worker}
   # Off only in tests that never generate a PDF.
   background-enabled: ${GENERATION_BACKGROUND_ENABLED:true}
   # Time limit of one attempt (DEC-005).
