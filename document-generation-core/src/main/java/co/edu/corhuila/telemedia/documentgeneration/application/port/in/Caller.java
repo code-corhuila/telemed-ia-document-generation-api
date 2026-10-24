@@ -13,6 +13,8 @@ public record Caller(String subject, Set<String> roles) {
 
     public static final String PATIENT = "PATIENT";
     public static final String ADMIN = "ADMIN";
+    /** A service with its own token from Identity & Access (ADR-022); its subject is the client id. */
+    public static final String SERVICE = "SERVICE";
 
     public Caller {
         Objects.requireNonNull(subject, "subject");
