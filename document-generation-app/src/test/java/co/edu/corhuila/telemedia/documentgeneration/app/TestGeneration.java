@@ -18,6 +18,8 @@ final class TestGeneration {
         // Any free management port, so contexts never compete for 9081.
         registry.add("MANAGEMENT_PORT", () -> "0");
         registry.add("GENERATION_BACKGROUND_ENABLED", () -> "false");
+        // There is no broker either: the relay is tested in its own classes.
+        registry.add("EVENTS_PUBLISHING_ENABLED", () -> "false");
         // Spans are created where a test asks for tracing, but never sent: there is no collector.
         registry.add("management.otlp.tracing.export.enabled", () -> "false");
     }

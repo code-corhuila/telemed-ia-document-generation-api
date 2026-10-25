@@ -42,6 +42,11 @@
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
         </dependency>
+        <!-- Outbound domain events (ADR-011, DEC-008): RabbitMQ with publisher confirms. -->
+        <dependency>
+            <groupId>com.rabbitmq</groupId>
+            <artifactId>amqp-client</artifactId>
+        </dependency>
         <!-- Generation metrics (NFR-005); the registry and its endpoint live in the app. -->
         <dependency>
             <groupId>io.micrometer</groupId>

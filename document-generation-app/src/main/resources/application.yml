@@ -84,6 +84,19 @@ identity:
   # Tokens last about ten minutes and have no refresh token: replaced this long before.
   refresh-margin-seconds: 60
 
+# ADR-011, DEC-008: the outbox is published to RabbitMQ, with the conventions of
+# 09-microservices/communication-patterns.md (2.1). Without a user in the URL, the
+# broker's default one is used; real credentials come from the environment.
+events:
+  # Off only where there is no broker.
+  publishing-enabled: ${EVENTS_PUBLISHING_ENABLED:true}
+  rabbitmq-url: ${RABBITMQ_URL:amqp://rabbitmq:5672}
+  # Pause between rounds, and events per round.
+  publish-interval-ms: 5000
+  batch-size: 50
+  # Wait for the broker's confirmation of each event, and for the connection.
+  confirm-timeout-ms: 5000
+
 server:
   port: ${SERVER_PORT:8080}
   shutdown: graceful
