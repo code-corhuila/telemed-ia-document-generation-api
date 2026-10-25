@@ -118,6 +118,7 @@ public final class JdbcDocumentStatusStore implements DocumentStatusStore {
         Map<String, String> payload = new LinkedHashMap<>();
         payload.put("documentId", event.documentId().toString());
         payload.put("summaryId", event.summaryId().toString());
+        payload.put("appointmentId", event.appointmentId().toString());
         payload.put("patientId", event.patientId().toString());
         payload.put("generatedAt", generatedAt.toString());
         try {
