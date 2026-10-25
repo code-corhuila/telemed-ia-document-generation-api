@@ -9,6 +9,8 @@ import java.util.Arrays;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -26,16 +28,19 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.background.BackgroundPdfGenerator;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.in.background.OutboxRelay;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.background.SchedulingDocumentGeneration;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.in.http.CorrelationFilter;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.consultation.HttpConsultationSummaryReader;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.IdentityServiceTokens;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.ServiceTokens;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.messaging.RabbitEventPublisher;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.metrics.MicrometerGenerationMetrics;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.pdf.PdfBoxRenderer;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcConsultationDocumentRepository;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcDocumentStatusStore;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcIdempotentDocumentStore;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcPendingEvents;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.UuidGenerator;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.storage.S3DocumentStorage;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.in.DocumentDownloads;
@@ -53,6 +58,7 @@ import co.edu.corhuila.telemedia.documentgeneration.application.port.out.Storage
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentDownloadService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentGenerationService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentQueryService;
+import co.edu.corhuila.telemedia.documentgeneration.application.usecase.OutboxPublicationService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.PdfGenerationService;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -273,5 +279,39 @@ public class DocumentGenerationConfiguration {
     @Bean
     DocumentDownloads documentDownloads(DocumentQueries queries, S3DocumentStorage storage) {
         return new DocumentDownloadService(queries, storage);
+    }
+
+    /** ADR-011, DEC-008: connects on the first publication, so the service starts without RabbitMQ. */
+    @Bean(destroyMethod = "close")
+    RabbitEventPublisher eventPublisher(@Value("${events.rabbitmq-url}") String url,
+            @Value("${events.confirm-timeout-ms}") long confirmTimeoutMs) {
+        return new RabbitEventPublisher(URI.create(url), Duration.ofMillis(confirmTimeoutMs));
+    }
+
+    /** One thread for the relay, apart from the PDF attempts. */
+    @Bean(destroyMethod = "shutdownNow")
+    ScheduledExecutorService outboxRelayExecutor() {
+        return Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, "outbox-relay");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    /** DEC-008: the committed events are published from startup on (norma 5.3.11). */
+    @Bean
+    ApplicationRunner startOutboxRelay(NamedParameterJdbcTemplate jdbc, PlatformTransactionManager transactions,
+            RabbitEventPublisher eventPublisher, ScheduledExecutorService outboxRelayExecutor,
+            @Value("${events.publishing-enabled}") boolean enabled,
+            @Value("${events.batch-size}") int batchSize,
+            @Value("${events.publish-interval-ms}") long intervalMs) {
+        return arguments -> {
+            if (enabled) {
+                OutboxPublicationService publication = new OutboxPublicationService(
+                        new JdbcPendingEvents(jdbc, transactions), eventPublisher, batchSize);
+                new OutboxRelay(publication, Duration.ofMillis(intervalMs), (task, delay) ->
+                        outboxRelayExecutor.schedule(task, delay.toMillis(), TimeUnit.MILLISECONDS)).start();
+            }
+        };
     }
 }
