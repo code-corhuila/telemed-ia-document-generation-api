@@ -102,9 +102,11 @@ class JdbcDocumentStatusStoreIntegrationTest {
         return reader.findById(document.id()).orElseThrow();
     }
 
+    private static final UUID APPOINTMENT = UUID.fromString("a0000000-0000-0000-0000-000000000123");
+
     private PdfGeneratedEvent event(ConsultationDocument document, Instant generatedAt, String correlationId) {
-        return new PdfGeneratedEvent(UUID.randomUUID(), document.id(), document.summaryId(), document.patientId(),
-                generatedAt, correlationId);
+        return new PdfGeneratedEvent(UUID.randomUUID(), document.id(), document.summaryId(), APPOINTMENT,
+                document.patientId(), generatedAt, correlationId);
     }
 
     private List<Map<String, Object>> outbox(ConsultationDocument document) {
@@ -199,7 +201,8 @@ class JdbcDocumentStatusStoreIntegrationTest {
 
         JsonNode payload = new ObjectMapper().readTree((String) outbox(generating).get(0).get("payload"));
         assertThat(payload.properties()).extracting(Map.Entry::getKey)
-                .containsExactlyInAnyOrder("documentId", "summaryId", "patientId", "generatedAt");
+                .containsExactlyInAnyOrder("documentId", "summaryId", "appointmentId", "patientId", "generatedAt");
+        assertThat(payload.get("appointmentId").asText()).isEqualTo(APPOINTMENT.toString());
         assertThat(payload.get("documentId").asText()).isEqualTo(generating.id().toString());
         assertThat(payload.get("summaryId").asText()).isEqualTo(generating.summaryId().toString());
         assertThat(payload.get("patientId").asText()).isEqualTo(generating.patientId().toString());
