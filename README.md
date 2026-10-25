@@ -21,6 +21,12 @@ patient authorized access to their own documents (HU-016).
 This repository contains **no migrations**: the schema lives only in the `-db` repository
 (numeral 5.2.1).
 
+Every `ConsultationPdfGenerated` is written to `document_generation.outbox_event` in the
+transaction that marks the document `AVAILABLE`, and a relay of the service publishes it to
+RabbitMQ every 5 seconds (numeral 5.3.11, DEC-008): queue `consultation_pdf_generated`,
+`message_id` = event id, the ADR-011 envelope as body, published only after the broker
+confirms it. Without the broker the service keeps working and the events wait in the outbox.
+
 ## Architecture
 
 Hexagonal, in three Maven modules (Anexo C):
