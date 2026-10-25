@@ -41,8 +41,12 @@ services:
       MANAGEMENT_PORT: "9081"
       # Traces (OBS-DG-02): the OpenTelemetry collector of the platform, OTLP over HTTP.
       OTLP_TRACING_ENDPOINT: "${OTLP_TRACING_ENDPOINT:-http://otel-collector:4318/v1/traces}"
-      # Outbox publication (DEC-008): the RabbitMQ of telemed-ia-worker, service rabbitmq.
-      RABBITMQ_URL: "${DOCUMENT_GENERATION_RABBITMQ_URL:-amqp://rabbitmq:5672}"
+      # Outbox publication (DEC-008, DEC-009): the RabbitMQ of telemed-ia-worker, service
+      # rabbitmq, with the broker user of the platform network.
+      RABBITMQ_HOST: "${RABBITMQ_HOST:-rabbitmq}"
+      RABBITMQ_PORT: "${RABBITMQ_PORT:-5672}"
+      RABBITMQ_USERNAME: "${RABBITMQ_USERNAME:-guest}"
+      RABBITMQ_PASSWORD: "${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD (the broker user of the platform network)}"
       EVENTS_PUBLISHING_ENABLED: "${DOCUMENT_GENERATION_EVENTS_PUBLISHING_ENABLED:-true}"
     expose:
       - "8080"
