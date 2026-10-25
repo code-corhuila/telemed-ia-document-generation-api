@@ -101,7 +101,7 @@ public final class PdfGenerationService implements DocumentPdfGeneration {
             Instant generatedAt = clock.instant();
             ConsultationDocument available = generating.markAvailable(key, generatedAt);
             PdfGeneratedEvent event = new PdfGeneratedEvent(ids.newId(), generating.id(), generating.summaryId(),
-                    generating.patientId(), generatedAt, correlationId);
+                    summary.appointmentId(), generating.patientId(), generatedAt, correlationId);
             if (!statusStore.complete(generating, available, event)) {
                 return GenerationAttempt.SKIPPED;
             }
