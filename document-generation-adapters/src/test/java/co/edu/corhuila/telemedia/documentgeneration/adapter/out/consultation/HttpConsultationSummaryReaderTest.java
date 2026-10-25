@@ -51,6 +51,7 @@ class HttpConsultationSummaryReaderTest {
     private static final UUID SUMMARY = UUID.fromString("e0000000-0000-0000-0000-000000000102");
     private static final UUID CONSULTATION = UUID.fromString("00000000-0000-0000-0000-000000009001");
     private static final UUID PATIENT = UUID.fromString("b0000000-0000-0000-0000-000000000001");
+    private static final UUID APPOINTMENT = UUID.fromString("a0000000-0000-0000-0000-000000000001");
     private static final String POST_PATH = "/api/post-summaries/" + SUMMARY;
     private static final String ATTENTION_PATH = "/api/consultations/" + CONSULTATION + "/attention";
     private static final String TRACE = "trace-123";
@@ -159,7 +160,7 @@ class HttpConsultationSummaryReaderTest {
 
         ConsultationSummary summary = reader().read(SUMMARY, TRACE);
 
-        assertThat(summary).isEqualTo(new ConsultationSummary(SUMMARY, CONSULTATION, PATIENT,
+        assertThat(summary).isEqualTo(new ConsultationSummary(SUMMARY, CONSULTATION, APPOINTMENT, PATIENT,
                 "Rinofaringitis aguda", "Reposo e hidratación",
                 List.of(new Medication("Acetaminofén", "500 mg", "cada 8 horas", "5 días"),
                         new Medication("Loratadina", null, null, null)),
@@ -311,7 +312,9 @@ class HttpConsultationSummaryReaderTest {
                 "not json",
                 "{\"id\": \"%s\"}".formatted(SUMMARY),
                 POST_SUMMARY.replace(PATIENT.toString(), "patient-1"),
-                POST_SUMMARY.replace("\"consultationId\": \"%s\",".formatted(CONSULTATION), ""));
+                POST_SUMMARY.replace("\"consultationId\": \"%s\",".formatted(CONSULTATION), ""),
+                // The appointment is required by the contract (PostSummary) and travels in the event.
+                POST_SUMMARY.replace("\"appointmentId\": \"%s\",".formatted(APPOINTMENT), ""));
         for (String body : invalidPostSummaries) {
             received.clear();
             answer(POST_PATH, ok(body));

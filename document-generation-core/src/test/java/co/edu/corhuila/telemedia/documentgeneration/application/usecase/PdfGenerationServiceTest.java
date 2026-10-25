@@ -41,6 +41,7 @@ class PdfGenerationServiceTest {
     private static final UUID PATIENT = UUID.fromString("b0000000-0000-0000-0000-000000000001");
     private static final UUID SUMMARY = UUID.fromString("e0000000-0000-0000-0000-000000000102");
     private static final UUID EVENT = UUID.fromString("f0000000-0000-0000-0000-000000000001");
+    private static final UUID APPOINTMENT = UUID.fromString("a0000000-0000-0000-0000-000000000102");
     private static final String TRACE = "trace-pdf-1";
     private static final byte[] PDF = {'%', 'P', 'D', 'F'};
 
@@ -68,7 +69,7 @@ class PdfGenerationServiceTest {
     }
 
     private static ConsultationSummary summary(UUID patientId) {
-        return new ConsultationSummary(SUMMARY, UUID.randomUUID(), patientId, "Acute pharyngitis",
+        return new ConsultationSummary(SUMMARY, UUID.randomUUID(), APPOINTMENT, patientId, "Acute pharyngitis",
                 "Rest and fluids", List.of(new ConsultationSummary.Medication("Acetaminophen", "500 mg",
                         "Every 8 hours", "3 days")),
                 null, null, Map.of("inDays", "7"));
@@ -90,7 +91,7 @@ class PdfGenerationServiceTest {
         assertThat(available.storageReference()).contains(key);
         assertThat(available.generatedAt()).contains(T0);
         assertThat(statusStore.event)
-                .isEqualTo(new PdfGeneratedEvent(EVENT, document.id(), SUMMARY, PATIENT, T0, TRACE));
+                .isEqualTo(new PdfGeneratedEvent(EVENT, document.id(), SUMMARY, APPOINTMENT, PATIENT, T0, TRACE));
         assertThat(renderer.rendered).isEqualTo(reader.summary);
         assertThat(reader.correlationId).isEqualTo(TRACE);
     }
