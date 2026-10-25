@@ -5,12 +5,15 @@ import java.net.http.HttpClient;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.ZoneId;
+import java.util.Arrays;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,8 +94,11 @@ public class DocumentGenerationConfiguration {
     /** POST /generate, then the background generation of the PENDING document (DEC-006). */
     @Bean
     DocumentGeneration documentGeneration(IdempotentDocumentStore store, IdGenerator ids, Clock clock,
-            BackgroundPdfGenerator generator) {
-        return new SchedulingDocumentGeneration(new DocumentGenerationService(store, ids, clock), generator,
+            BackgroundPdfGenerator generator,
+            @Value("${generation.service-clients}") String[] serviceClients) {
+        Set<String> allowed = Arrays.stream(serviceClients).map(String::trim).filter(client -> !client.isEmpty())
+                .collect(Collectors.toUnmodifiableSet());
+        return new SchedulingDocumentGeneration(new DocumentGenerationService(store, ids, clock, allowed), generator,
                 () -> Optional.ofNullable(MDC.get(CorrelationFilter.MDC_KEY))
                         .orElseGet(() -> UUID.randomUUID().toString()));
     }
