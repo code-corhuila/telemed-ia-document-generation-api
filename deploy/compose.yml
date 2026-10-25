@@ -41,6 +41,9 @@ services:
       MANAGEMENT_PORT: "9081"
       # Traces (OBS-DG-02): the OpenTelemetry collector of the platform, OTLP over HTTP.
       OTLP_TRACING_ENDPOINT: "${OTLP_TRACING_ENDPOINT:-http://otel-collector:4318/v1/traces}"
+      # Outbox publication (DEC-008): the RabbitMQ of telemed-ia-worker, service rabbitmq.
+      RABBITMQ_URL: "${DOCUMENT_GENERATION_RABBITMQ_URL:-amqp://rabbitmq:5672}"
+      EVENTS_PUBLISHING_ENABLED: "${DOCUMENT_GENERATION_EVENTS_PUBLISHING_ENABLED:-true}"
     expose:
       - "8080"
       - "9081"
