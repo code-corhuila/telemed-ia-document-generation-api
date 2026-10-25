@@ -38,7 +38,8 @@ class PdfBoxRendererTest {
 
     private static ConsultationSummary summary(String recommendations, List<Medication> medications,
             String diagnosis, String observations, String referral, Map<String, String> followUp) {
-        return new ConsultationSummary(SUMMARY, CONSULTATION, PATIENT, diagnosis, recommendations, medications,
+        return new ConsultationSummary(SUMMARY, CONSULTATION, UUID.randomUUID(), PATIENT, diagnosis, recommendations,
+                medications,
                 observations, referral, followUp);
     }
 

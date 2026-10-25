@@ -23,9 +23,11 @@ This repository contains **no migrations**: the schema lives only in the `-db` r
 
 Every `ConsultationPdfGenerated` is written to `document_generation.outbox_event` in the
 transaction that marks the document `AVAILABLE`, and a relay of the service publishes it to
-RabbitMQ every 5 seconds (numeral 5.3.11, DEC-008): queue `consultation_pdf_generated`,
-`message_id` = event id, the ADR-011 envelope as body, published only after the broker
-confirms it. Without the broker the service keeps working and the events wait in the outbox.
+RabbitMQ every 5 seconds (numeral 5.3.11, DEC-008, DEC-009): exchange `documents.events`
+(topic), routing key `consultation-pdf-generated`, `message_id` = event id, the ADR-011
+envelope as body. An event counts as published only when the broker confirms it and a
+consumer's queue took it; each consumer binds its own queue. Without the broker, or before
+the first consumer, the service keeps working and the events wait in the outbox.
 
 ## Architecture
 
