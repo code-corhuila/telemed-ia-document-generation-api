@@ -1,0 +1,22 @@
+# Composition root configuration.
+# Numeral 5.3.10: every limit is declared here with its value. A default that is
+# not written down is not a decision.
+spring:
+  application:
+    name: document-generation-api
+  lifecycle:
+    # Graceful shutdown budget.
+    timeout-per-shutdown-phase: 20s
+
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+  tomcat:
+    # Maximum time to receive the request headers.
+    connection-timeout: 5s
+    # Idle keep-alive connections are closed after this time.
+    keep-alive-timeout: 60s
+  error:
+    include-message: never
+    include-stacktrace: never
+    include-exception: false
