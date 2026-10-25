@@ -283,9 +283,13 @@ public class DocumentGenerationConfiguration {
 
     /** ADR-011, DEC-008: connects on the first publication, so the service starts without RabbitMQ. */
     @Bean(destroyMethod = "close")
-    RabbitEventPublisher eventPublisher(@Value("${events.rabbitmq-url}") String url,
+    RabbitEventPublisher eventPublisher(@Value("${events.rabbitmq.host}") String host,
+            @Value("${events.rabbitmq.port}") int port,
+            @Value("${events.rabbitmq.username}") String username,
+            @Value("${events.rabbitmq.password}") String password,
             @Value("${events.confirm-timeout-ms}") long confirmTimeoutMs) {
-        return new RabbitEventPublisher(URI.create(url), Duration.ofMillis(confirmTimeoutMs));
+        return new RabbitEventPublisher(new RabbitEventPublisher.Settings(host, port, username, password,
+                Duration.ofMillis(confirmTimeoutMs)));
     }
 
     /** One thread for the relay, apart from the PDF attempts. */

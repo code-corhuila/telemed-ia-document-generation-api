@@ -1,11 +1,11 @@
 package co.edu.corhuila.telemedia.documentgeneration.adapter.out.messaging;
 
 import java.io.IOException;
-import java.net.URI;
 import java.time.Duration;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeoutException;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,54 +20,75 @@ import co.edu.corhuila.telemedia.documentgeneration.application.port.out.EventPu
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PendingEvent;
 
 /**
- * Publishes to RabbitMQ with the conventions of {@code communication-patterns.md} (2.1):
- * default exchange, a durable queue named after the event in {@code snake_case} with its
- * {@code .dlq}, {@code message_id} = event id. Messages are persistent and wait for the
- * broker's confirmation (DEC-008). The connection is opened on the first publication and
- * again after a failure, so the service starts without the broker.
+ * Publishes to RabbitMQ with the common event contract of {@code communication-patterns.md}
+ * (2.1, DEC-009): the durable topic exchange {@code documents.events}, routing key = event
+ * name in kebab case, {@code message_id} = event id, persistent, publisher confirms. It
+ * declares no queue: consumers own theirs. Messages are {@code mandatory}, so an event that
+ * no queue takes is returned and counts as not published. The connection is opened on the
+ * first publication and again after a failure, so the service starts without the broker.
  */
 public final class RabbitEventPublisher implements EventPublisher, AutoCloseable {
 
+    static final String EXCHANGE = "documents.events";
+
     private static final ObjectMapper JSON = new ObjectMapper();
+
+    /** @param password from the environment, never versioned; left out of {@link #toString()} */
+    public record Settings(String host, int port, String username, String password, Duration confirmTimeout) {
+
+        public Settings {
+            Objects.requireNonNull(host, "host");
+            Objects.requireNonNull(username, "username");
+            Objects.requireNonNull(password, "password");
+            Objects.requireNonNull(confirmTimeout, "confirmTimeout");
+            if (port < 1 || !confirmTimeout.isPositive()) {
+                throw new IllegalArgumentException("the broker port and the confirmation timeout must be positive");
+            }
+        }
+
+        @Override
+        public String toString() {
+            return "Settings[host=" + host + ", port=" + port + ", username=" + username + ", password=***"
+                    + ", confirmTimeout=" + confirmTimeout + "]";
+        }
+    }
 
     private final ConnectionFactory factory = new ConnectionFactory();
     private final Duration confirmTimeout;
+    /** Message ids the broker returned because no queue took them. */
+    private final Set<String> returned = ConcurrentHashMap.newKeySet();
     private Connection connection;
     private Channel channel;
 
-    /** @param uri {@code amqp://user:password@host:port/vhost}; never logged */
-    public RabbitEventPublisher(URI uri, Duration confirmTimeout) {
-        this.confirmTimeout = Objects.requireNonNull(confirmTimeout, "confirmTimeout");
-        try {
-            factory.setUri(Objects.requireNonNull(uri, "uri"));
-        } catch (Exception e) {
-            throw new IllegalArgumentException("RABBITMQ_URL is not a valid amqp URI");
-        }
+    public RabbitEventPublisher(Settings settings) {
+        this.confirmTimeout = settings.confirmTimeout();
+        factory.setHost(settings.host());
+        factory.setPort(settings.port());
+        factory.setUsername(settings.username());
+        factory.setPassword(settings.password());
         factory.setConnectionTimeout((int) confirmTimeout.toMillis());
         factory.setAutomaticRecoveryEnabled(false);
     }
 
-    /** {@code ConsultationPdfGenerated} → {@code consultation_pdf_generated}. */
-    static String queueOf(String eventType) {
-        return eventType.replaceAll("([a-z0-9])([A-Z])", "$1_$2").toLowerCase(Locale.ROOT);
+    /** {@code ConsultationPdfGenerated} → {@code consultation-pdf-generated}. */
+    static String routingKeyOf(String eventType) {
+        return eventType.replaceAll("([a-z0-9])([A-Z])", "$1-$2").toLowerCase(Locale.ROOT);
     }
 
     @Override
     public synchronized void publish(PendingEvent event) {
-        String queue = queueOf(event.eventType());
+        String messageId = event.eventId().toString();
         try {
             Channel open = channel();
-            open.queueDeclare(queue + ".dlq", true, false, false, null);
-            open.queueDeclare(queue, true, false, false,
-                    Map.of("x-dead-letter-exchange", "", "x-dead-letter-routing-key", queue + ".dlq"));
             AMQP.BasicProperties properties = new AMQP.BasicProperties.Builder()
-                    .messageId(event.eventId().toString())
+                    .messageId(messageId)
                     .type(event.eventType())
                     .correlationId(event.correlationId())
                     .contentType("application/json")
                     .deliveryMode(2)
                     .build();
-            open.basicPublish("", queue, properties, envelope(event));
+            open.basicPublish(EXCHANGE, routingKeyOf(event.eventType()), true, properties, envelope(event));
+            // A return always arrives before the confirmation of the same message.
             open.waitForConfirmsOrDie(confirmTimeout.toMillis());
         } catch (IOException | TimeoutException | RuntimeException e) {
             reset();
@@ -77,6 +98,9 @@ public final class RabbitEventPublisher implements EventPublisher, AutoCloseable
             reset();
             throw new EventPublicationException("RabbitMQ publication interrupted");
         }
+        if (returned.remove(messageId)) {
+            throw new EventPublicationException("no queue is bound to " + EXCHANGE + " for " + event.eventType());
+        }
     }
 
     private Channel channel() throws IOException, TimeoutException {
@@ -85,6 +109,8 @@ public final class RabbitEventPublisher implements EventPublisher, AutoCloseable
             connection = factory.newConnection("document-generation-api");
             channel = connection.createChannel();
             channel.confirmSelect();
+            channel.exchangeDeclare(EXCHANGE, "topic", true);
+            channel.addReturnListener(message -> returned.add(message.getProperties().getMessageId()));
         }
         return channel;
     }
@@ -102,6 +128,7 @@ public final class RabbitEventPublisher implements EventPublisher, AutoCloseable
     }
 
     private void reset() {
+        returned.clear();
         try {
             if (connection != null) {
                 connection.abort();

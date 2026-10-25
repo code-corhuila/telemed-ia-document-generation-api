@@ -13,6 +13,7 @@ import java.util.UUID;
 public record ConsultationSummary(
         UUID summaryId,
         UUID consultationId,
+        UUID appointmentId,
         UUID patientId,
         String diagnosis,
         String recommendations,
@@ -24,6 +25,7 @@ public record ConsultationSummary(
     public ConsultationSummary {
         Objects.requireNonNull(summaryId, "summaryId");
         Objects.requireNonNull(consultationId, "consultationId");
+        Objects.requireNonNull(appointmentId, "appointmentId");
         Objects.requireNonNull(patientId, "patientId");
         Objects.requireNonNull(recommendations, "recommendations");
         medications = medications == null ? List.of() : List.copyOf(medications);

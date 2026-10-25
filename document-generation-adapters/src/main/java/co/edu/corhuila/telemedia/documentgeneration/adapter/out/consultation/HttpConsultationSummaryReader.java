@@ -122,7 +122,8 @@ public final class HttpConsultationSummaryReader implements ConsultationSummaryR
         if (attention.hasNonNull("consultationId") && !consultationId.equals(uuid(attention, "consultationId"))) {
             throw invalid("the attention summary belongs to another consultation");
         }
-        return new ConsultationSummary(uuid(postSummary, "id"), consultationId, uuid(postSummary, "patientId"),
+        return new ConsultationSummary(uuid(postSummary, "id"), consultationId, uuid(postSummary, "appointmentId"),
+                uuid(postSummary, "patientId"),
                 text(attention, "diagnosis"), required(text(attention, "recommendations"), "recommendations"),
                 medications(attention.get("medications")), text(attention, "observations"),
                 text(attention, "referral"), followUp(attention.get("followUp")));
