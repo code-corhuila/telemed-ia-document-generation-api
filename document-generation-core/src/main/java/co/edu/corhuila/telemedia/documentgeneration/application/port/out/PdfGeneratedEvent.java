@@ -12,6 +12,7 @@ public record PdfGeneratedEvent(
         UUID eventId,
         UUID documentId,
         UUID summaryId,
+        UUID appointmentId,
         UUID patientId,
         Instant generatedAt,
         String correlationId) {
@@ -22,6 +23,7 @@ public record PdfGeneratedEvent(
         Objects.requireNonNull(eventId, "eventId");
         Objects.requireNonNull(documentId, "documentId");
         Objects.requireNonNull(summaryId, "summaryId");
+        Objects.requireNonNull(appointmentId, "appointmentId");
         Objects.requireNonNull(patientId, "patientId");
         Objects.requireNonNull(generatedAt, "generatedAt");
         Objects.requireNonNull(correlationId, "correlationId");
