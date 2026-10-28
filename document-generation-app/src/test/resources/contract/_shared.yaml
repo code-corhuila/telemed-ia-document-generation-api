@@ -1,4 +1,4 @@
-# Copy of telemed-ia-docs/07-api/contracts/openapi/_shared.yaml at 0f7ab36.
+# Copy of telemed-ia-docs/07-api/contracts/openapi/_shared.yaml at 0856781.
 # The contract lives in telemed-ia-docs; update this copy when it changes, never edit it here.
 openapi: 3.0.3
 
@@ -234,28 +234,23 @@ components:
           $ref: '#/components/schemas/Id'
           description: External Identity & Access user identifier
 
+        fullName:
+          type: string
+          description: Full name of the Identity & Access account, read when the professionals are listed or read by id (DEC-008 of the Professional Service). Absent when Identity & Access does not return the account.
+
+        email:
+          type: string
+          format: email
+          description: E-mail of the Identity & Access account, read with `fullName` (DEC-008 of the Professional Service). Returned only to callers with the `ADMIN` role (DEC-009); absent for other roles and when Identity & Access does not return the account.
+
         licenseNumber:
           type: string
-
-        specialty:
-          type: object
-          description: Professional Management-owned specialty information
-          properties:
-            id:
-              $ref: '#/components/schemas/Id'
-
-            name:
-              type: string
-
-            description:
-              type: string
 
         professionalType:
           type: string
           enum:
             - GENERAL_PRACTITIONER
-            - SPECIALIST
-          description: Type/classification of the professional.
+          description: Type of the professional. Every professional is a general practitioner (DEC-005 of the Professional Service).
 
         status:
           type: string
