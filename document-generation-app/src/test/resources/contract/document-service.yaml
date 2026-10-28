@@ -1,4 +1,4 @@
-# Copy of telemed-ia-docs/07-api/contracts/openapi/document-service.yaml at 25c01b3.
+# Copy of telemed-ia-docs/07-api/contracts/openapi/document-service.yaml at 0856781.
 # The contract lives in telemed-ia-docs; update this copy when it changes, never edit it here.
 openapi: 3.0.3
 
@@ -95,8 +95,10 @@ paths:
         - A document already exists for `summaryId` (any key): `200` with that
           document, matching the event-consumer idempotency rule.
 
-        Restricted to the `ADMIN` role: the regular trigger is the
-        `PostConsultationSummaryGenerated` event, not a patient action.
+        Restricted to the `ADMIN` role, or to the `SERVICE` role with an allowed
+        client as `sub` (DEC-007, ADR-022): the regular trigger is the consumer of
+        the `PostConsultationSummaryGenerated` event, which sends the event id as
+        the `Idempotency-Key`. It is not a patient action.
       tags: [Documents]
       security:
         - bearerAuth: []
