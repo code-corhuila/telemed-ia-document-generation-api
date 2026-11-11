@@ -17,6 +17,7 @@ import org.junit.jupiter.api.Test;
 
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummary;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummary.Medication;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PatientDetails;
 import co.edu.corhuila.telemedia.documentgeneration.domain.model.ConsultationDocument;
 
 /**
@@ -65,7 +66,7 @@ class PdfBoxRendererTest {
 
     @Test
     void theResultIsAPdfWithItsTitleInTheMetadata() throws IOException {
-        byte[] pdf = renderer.render(document, complete(), ISSUED_AT);
+        byte[] pdf = renderer.render(document, complete(), PatientDetails.NONE, ISSUED_AT);
 
         assertThat(new String(pdf, 0, 5, StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
         try (PDDocument loaded = Loader.loadPDF(pdf)) {
@@ -76,7 +77,7 @@ class PdfBoxRendererTest {
 
     @Test
     void theHeaderHasTheIdentifiersAndTheLocalIssueTime() throws IOException {
-        String text = text(renderer.render(document, complete(), ISSUED_AT));
+        String text = text(renderer.render(document, complete(), PatientDetails.NONE, ISSUED_AT));
 
         assertThat(text)
                 .contains("Resumen de atención médica")
@@ -88,7 +89,7 @@ class PdfBoxRendererTest {
 
     @Test
     void everyClinicalSectionIsPrinted() throws IOException {
-        String text = text(renderer.render(document, complete(), ISSUED_AT));
+        String text = text(renderer.render(document, complete(), PatientDetails.NONE, ISSUED_AT));
 
         assertThat(text)
                 .contains("Diagnóstico", "Rinofaringitis aguda")
@@ -106,7 +107,7 @@ class PdfBoxRendererTest {
     @Test
     void absentOptionalSectionsAreLeftOut() throws IOException {
         String text = text(renderer.render(document,
-                summary("Control en una semana.", List.of(), null, null, null, Map.of()), ISSUED_AT));
+                summary("Control en una semana.", List.of(), null, null, null, Map.of()), PatientDetails.NONE, ISSUED_AT));
 
         assertThat(text).contains("Recomendaciones", "Control en una semana.")
                 .doesNotContain("Diagnóstico", "Medicamentos", "Observaciones", "Remisión", "Seguimiento");
@@ -114,7 +115,7 @@ class PdfBoxRendererTest {
 
     @Test
     void thePatientIdentifierIsNotPrinted() throws IOException {
-        assertThat(text(renderer.render(document, complete(), ISSUED_AT))).doesNotContain(PATIENT.toString());
+        assertThat(text(renderer.render(document, complete(), PatientDetails.NONE, ISSUED_AT))).doesNotContain(PATIENT.toString());
     }
 
     @Test
@@ -122,7 +123,7 @@ class PdfBoxRendererTest {
         String paragraph = "Tomar el medicamento con alimentos y registrar cualquier reacción adversa. ";
         String recommendations = paragraph.repeat(400) + "FIN";
 
-        byte[] pdf = renderer.render(document, summary(recommendations, List.of(), null, null, null, null),
+        byte[] pdf = renderer.render(document, summary(recommendations, List.of(), null, null, null, null), PatientDetails.NONE,
                 ISSUED_AT);
 
         int pages = pages(pdf);
@@ -136,7 +137,7 @@ class PdfBoxRendererTest {
         String word = "x".repeat(400);
 
         String text = text(renderer.render(document,
-                summary(word, List.of(), null, null, null, null), ISSUED_AT));
+                summary(word, List.of(), null, null, null, null), PatientDetails.NONE, ISSUED_AT));
 
         assertThat(text.replaceAll("\\s", "")).contains(word);
     }
@@ -144,7 +145,7 @@ class PdfBoxRendererTest {
     @Test
     void lineBreaksOfTheSummaryAreKept() throws IOException {
         String text = text(renderer.render(document,
-                summary("Primera línea\r\nSegunda línea\n\tTercera", List.of(), null, null, null, null), ISSUED_AT));
+                summary("Primera línea\r\nSegunda línea\n\tTercera", List.of(), null, null, null, null), PatientDetails.NONE, ISSUED_AT));
 
         assertThat(text).containsSubsequence("Primera línea", "\n", "Segunda línea", "\n", "Tercera");
     }
@@ -152,7 +153,7 @@ class PdfBoxRendererTest {
     @Test
     void charactersTheFontCannotDrawAreReplacedAndAccentsKept() throws IOException {
         String text = text(renderer.render(document,
-                summary("Ñandú ¿cómo? ¡ánimo! 😀 → 漢", List.of(), null, null, null, null), ISSUED_AT));
+                summary("Ñandú ¿cómo? ¡ánimo! 😀 → 漢", List.of(), null, null, null, null), PatientDetails.NONE, ISSUED_AT));
 
         assertThat(text).contains("Ñandú ¿cómo? ¡ánimo! ? ? ?");
     }

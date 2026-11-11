@@ -23,6 +23,7 @@ import org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName;
 
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummary;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.ConsultationSummary.Medication;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PatientDetails;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfRenderer;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfRenderingException;
 import co.edu.corhuila.telemedia.documentgeneration.domain.model.ConsultationDocument;
@@ -59,7 +60,8 @@ public final class PdfBoxRenderer implements PdfRenderer {
     }
 
     @Override
-    public byte[] render(ConsultationDocument document, ConsultationSummary summary, Instant issuedAt) {
+    public byte[] render(ConsultationDocument document, ConsultationSummary summary, PatientDetails details,
+            Instant issuedAt) {
         try (PDDocument pdf = new PDDocument()) {
             pdf.getDocumentInformation().setTitle(TITLE);
             pdf.getDocumentInformation().setCreationDate(GregorianCalendar.from(issuedAt.atZone(zone)));

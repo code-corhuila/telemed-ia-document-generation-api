@@ -37,6 +37,7 @@ import co.edu.corhuila.telemedia.documentgeneration.adapter.out.identity.Service
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.messaging.RabbitEventPublisher;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.metrics.MicrometerGenerationMetrics;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.pdf.PdfBoxRenderer;
+import co.edu.corhuila.telemedia.documentgeneration.adapter.out.report.HttpPatientDetailsReader;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcConsultationDocumentRepository;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcDocumentStatusStore;
 import co.edu.corhuila.telemedia.documentgeneration.adapter.out.persistence.JdbcIdempotentDocumentStore;
@@ -59,6 +60,7 @@ import co.edu.corhuila.telemedia.documentgeneration.application.usecase.Document
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentGenerationService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentQueryService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.OutboxPublicationService;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PatientDetailsReader;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.PdfGenerationService;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -159,6 +161,22 @@ public class DocumentGenerationConfiguration {
     }
 
     /**
+     * DEC-015: names from identity and the reason for the visit from the agent, both optional.
+     * Without AGENT_BASE_URL the reason is not read.
+     */
+    @Bean
+    PatientDetailsReader patientDetailsReader(@Value("${identity.base-url}") String identityUrl,
+            @Value("${agent.base-url:}") String agentUrl, ServiceTokens serviceTokens,
+            @Value("${consultation.request-timeout-ms}") long requestTimeoutMs, MeterRegistry meters,
+            ObservationRegistry observations) {
+        Duration requestTimeout = Duration.ofMillis(requestTimeoutMs);
+        HttpClient http = traced(HttpClient.newBuilder().connectTimeout(requestTimeout).build(), meters,
+                observations);
+        return new HttpPatientDetailsReader(http, new HttpPatientDetailsReader.Settings(URI.create(identityUrl),
+                agentUrl.isBlank() ? null : URI.create(agentUrl), requestTimeout), serviceTokens);
+    }
+
+    /**
      * OBS-DG-02: each outgoing call is a client span and sends the W3C {@code traceparent} of
      * the current trace, so identity and Medical Consultation continue it.
      */
@@ -173,10 +191,12 @@ public class DocumentGenerationConfiguration {
 
     @Bean
     DocumentPdfGeneration documentPdfGeneration(ConsultationDocumentRepository repository,
-            DocumentStatusStore statusStore, ConsultationSummaryReader summaries, PdfRenderer renderer,
+            DocumentStatusStore statusStore, ConsultationSummaryReader summaries,
+            PatientDetailsReader patientDetails, PdfRenderer renderer,
             S3DocumentStorage storage, IdGenerator ids, GenerationMetrics metrics, Clock clock,
             @Value("${generation.attempt-timeout-seconds}") long attemptTimeoutSeconds) {
-        return new PdfGenerationService(repository, statusStore, summaries, renderer, storage, ids, metrics,
+        return new PdfGenerationService(repository, statusStore, summaries, patientDetails, renderer,
+                storage, ids, metrics,
                 clock, Duration.ofSeconds(attemptTimeoutSeconds));
     }
 
