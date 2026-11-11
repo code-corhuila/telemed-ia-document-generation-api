@@ -179,7 +179,7 @@ class HttpConsultationSummaryReaderTest {
 
         assertThat(summary).isEqualTo(new ConsultationSummary(SUMMARY, CONSULTATION, APPOINTMENT, PATIENT,
                 "Rinofaringitis aguda", "Reposo e hidratación",
-                List.of(new Medication("Acetaminofén", "500 mg", "cada 8 horas", "5 días"),
+                List.of(new Medication("Acetaminofén", "500 mg", "cada 8 horas", "5 días", "con alimentos"),
                         new Medication("Loratadina", null, null, null)),
                 "Estable", "Otorrinolaringología", Map.of("control", "15 días", "inDays", "15")));
         assertThat(received).extracting(Received::path).containsExactly(POST_PATH, ATTENTION_PATH);
