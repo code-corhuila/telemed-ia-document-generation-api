@@ -10,5 +10,6 @@ public interface PdfRenderer {
     /**
      * @throws PdfRenderingException if the PDF cannot be produced
      */
-    byte[] render(ConsultationDocument document, ConsultationSummary summary, Instant issuedAt);
+    byte[] render(ConsultationDocument document, ConsultationSummary summary, PatientDetails details,
+            Instant issuedAt);
 }
