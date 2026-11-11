@@ -57,7 +57,7 @@ generation:
   # Wait before a retry: full jitter over base * 2^n, capped (norma 5.7.2).
   retry-backoff-base-ms: 5000
   retry-backoff-cap-ms: 60000
-  # Time zone of the issue date printed on the PDF.
+  # Time zone of the consultation date printed on the PDF.
   time-zone: America/Bogota
 
 # DEC-006: the summary is read from Medical Consultation through its API.
@@ -70,6 +70,11 @@ consultation:
   max-attempts: 3
   backoff-base-ms: 200
   backoff-cap-ms: 2000
+
+# DEC-015: the reason for the visit for the patient's PDF, from the agent
+# (GET /internal/preconsultation-reports). Optional: unset, the PDF has no reason section.
+agent:
+  base-url: ${AGENT_BASE_URL:}
 
 # Norma 5.7: the service token is issued by the identity service (identity-and-access-api
 # #117) at POST /internal/service-token, inside the platform network only.
