@@ -18,6 +18,8 @@ import co.edu.corhuila.telemedia.documentgeneration.application.port.out.Documen
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.GenerationMetrics;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.IdGenerator;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfGeneratedEvent;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PatientDetails;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PatientDetailsReader;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfRenderer;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.StorageUnavailableException;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.SummaryUnavailableException;
@@ -48,6 +50,7 @@ public final class PdfGenerationService implements DocumentPdfGeneration {
     private final DocumentStatusStore statusStore;
     private final ConsultationSummaryReader summaries;
     private final PdfRenderer renderer;
+    private final PatientDetailsReader details;
     private final DocumentStorage storage;
     private final IdGenerator ids;
     private final GenerationMetrics metrics;
@@ -55,12 +58,13 @@ public final class PdfGenerationService implements DocumentPdfGeneration {
     private final Duration attemptTimeout;
 
     public PdfGenerationService(ConsultationDocumentRepository repository, DocumentStatusStore statusStore,
-            ConsultationSummaryReader summaries, PdfRenderer renderer, DocumentStorage storage, IdGenerator ids,
-            GenerationMetrics metrics, Clock clock, Duration attemptTimeout) {
+            ConsultationSummaryReader summaries, PatientDetailsReader details, PdfRenderer renderer,
+            DocumentStorage storage, IdGenerator ids, GenerationMetrics metrics, Clock clock, Duration attemptTimeout) {
         this.repository = Objects.requireNonNull(repository, "repository");
         this.statusStore = Objects.requireNonNull(statusStore, "statusStore");
         this.summaries = Objects.requireNonNull(summaries, "summaries");
         this.renderer = Objects.requireNonNull(renderer, "renderer");
+        this.details = Objects.requireNonNull(details, "details");
         this.storage = Objects.requireNonNull(storage, "storage");
         this.ids = Objects.requireNonNull(ids, "ids");
         this.metrics = Objects.requireNonNull(metrics, "metrics");
@@ -93,7 +97,7 @@ public final class PdfGenerationService implements DocumentPdfGeneration {
             if (!summary.patientId().equals(generating.patientId()) || !summary.summaryId().equals(generating.summaryId())) {
                 throw new AttemptFailed(SUMMARY_MISMATCH);
             }
-            byte[] pdf = renderer.render(generating, summary, clock.instant());
+            byte[] pdf = renderer.render(generating, summary, PatientDetails.NONE, clock.instant());
             checkDeadline(deadline);
             String key = objectKey(generating);
             storage.store(key, pdf);
