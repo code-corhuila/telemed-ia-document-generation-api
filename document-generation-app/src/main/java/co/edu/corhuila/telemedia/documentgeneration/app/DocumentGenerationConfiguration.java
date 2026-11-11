@@ -59,6 +59,7 @@ import co.edu.corhuila.telemedia.documentgeneration.application.usecase.Document
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentGenerationService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.DocumentQueryService;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.OutboxPublicationService;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PatientDetailsReader;
 import co.edu.corhuila.telemedia.documentgeneration.application.usecase.PdfGenerationService;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -176,7 +177,8 @@ public class DocumentGenerationConfiguration {
             DocumentStatusStore statusStore, ConsultationSummaryReader summaries, PdfRenderer renderer,
             S3DocumentStorage storage, IdGenerator ids, GenerationMetrics metrics, Clock clock,
             @Value("${generation.attempt-timeout-seconds}") long attemptTimeoutSeconds) {
-        return new PdfGenerationService(repository, statusStore, summaries, renderer, storage, ids, metrics,
+        return new PdfGenerationService(repository, statusStore, summaries, PatientDetailsReader.NONE, renderer,
+                storage, ids, metrics,
                 clock, Duration.ofSeconds(attemptTimeoutSeconds));
     }
 
