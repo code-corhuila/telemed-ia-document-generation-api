@@ -97,7 +97,7 @@ public final class PdfGenerationService implements DocumentPdfGeneration {
             if (!summary.patientId().equals(generating.patientId()) || !summary.summaryId().equals(generating.summaryId())) {
                 throw new AttemptFailed(SUMMARY_MISMATCH);
             }
-            byte[] pdf = renderer.render(generating, summary, PatientDetails.NONE, clock.instant());
+            byte[] pdf = renderer.render(generating, summary, details(summary, correlationId), clock.instant());
             checkDeadline(deadline);
             String key = objectKey(generating);
             storage.store(key, pdf);
@@ -120,6 +120,16 @@ public final class PdfGenerationService implements DocumentPdfGeneration {
         } catch (RuntimeException e) {
             // PdfRenderingException and any unexpected failure of the attempt (DEC-005: "PDF error").
             return fail(generating, PDF_ERROR);
+        }
+    }
+
+    /** DEC-015: names and the reason are optional; without them the PDF is still generated. */
+    private PatientDetails details(ConsultationSummary summary, String correlationId) {
+        try {
+            PatientDetails read = details.read(summary, correlationId);
+            return read == null ? PatientDetails.NONE : read;
+        } catch (RuntimeException e) {
+            return PatientDetails.NONE;
         }
     }
 

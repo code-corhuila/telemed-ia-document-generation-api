@@ -6,6 +6,8 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -126,7 +128,8 @@ public final class HttpConsultationSummaryReader implements ConsultationSummaryR
                 uuid(postSummary, "patientId"),
                 text(attention, "diagnosis"), required(text(attention, "recommendations"), "recommendations"),
                 medications(attention.get("medications")), text(attention, "observations"),
-                text(attention, "referral"), followUp(attention.get("followUp")));
+                text(attention, "referral"), followUp(attention.get("followUp")),
+                optionalUuid(postSummary, "professionalId"), optionalInstant(postSummary, "completedAt"));
     }
 
     /** The {@code data} object of a 200 answer, retrying what a retry can fix. */
@@ -220,6 +223,23 @@ public final class HttpConsultationSummaryReader implements ConsultationSummaryR
         }
     }
 
+    /** Consultation DEC-008: absent in older answers, so absent is {@code null}. */
+    private static UUID optionalUuid(JsonNode node, String field) {
+        return text(node, field) == null ? null : uuid(node, field);
+    }
+
+    private static Instant optionalInstant(JsonNode node, String field) {
+        String value = text(node, field);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Instant.parse(value);
+        } catch (DateTimeParseException e) {
+            throw invalid(field + " is not an RFC 3339 instant");
+        }
+    }
+
     /** An optional string field: absent or null is {@code null}; any other type is invalid. */
     private static String text(JsonNode node, String field) {
         JsonNode value = node.get(field);
@@ -252,7 +272,7 @@ public final class HttpConsultationSummaryReader implements ConsultationSummaryR
                 throw invalid("a medication is not an object");
             }
             medications.add(new Medication(required(text(item, "name"), "medication name"), text(item, "dosage"),
-                    text(item, "frequency"), text(item, "duration")));
+                    text(item, "frequency"), text(item, "duration"), text(item, "instructions")));
         }
         return medications;
     }
