@@ -71,6 +71,11 @@ consultation:
   backoff-base-ms: 200
   backoff-cap-ms: 2000
 
+# DEC-015: the reason for the visit for the patient's PDF, from the agent
+# (GET /internal/preconsultation-reports). Optional: unset, the PDF has no reason section.
+agent:
+  base-url: ${AGENT_BASE_URL:}
+
 # Norma 5.7: the service token is issued by the identity service (identity-and-access-api
 # #117) at POST /internal/service-token, inside the platform network only.
 # IDENTITY_URL is required. SERVICE_CLIENT_SECRET is never versioned; without it,

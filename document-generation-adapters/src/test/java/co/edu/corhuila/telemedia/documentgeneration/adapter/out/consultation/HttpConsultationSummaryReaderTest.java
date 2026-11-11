@@ -117,6 +117,23 @@ class HttpConsultationSummaryReaderTest {
         server.stop(0);
     }
 
+    @Test
+    void readsWhoAttendedWhenAndTheMedicationInstructions() {
+        UUID professional = UUID.fromString("c0000000-0000-0000-0000-000000000002");
+        String postSummary = POST_SUMMARY.replace("\"generatedAt\"",
+                "\"professionalId\": \"" + professional + "\", \"completedAt\": \"2026-10-23T13:30:00Z\", "
+                        + "\"generatedAt\"");
+        answers.put(POST_PATH, new ConcurrentLinkedDeque<>(List.of(new Answer(200, postSummary, 0))));
+        answers.put(ATTENTION_PATH, new ConcurrentLinkedDeque<>(List.of(new Answer(200, ATTENTION, 0))));
+
+        ConsultationSummary summary = reader().read(SUMMARY, TRACE);
+
+        assertThat(summary.professionalId()).isEqualTo(professional);
+        assertThat(summary.completedAt()).isEqualTo(java.time.Instant.parse("2026-10-23T13:30:00Z"));
+        assertThat(summary.medications().get(0).instructions()).isEqualTo("con alimentos");
+        assertThat(summary.medications().get(1).instructions()).isNull();
+    }
+
     /** Answers in order; the last one repeats. */
     private void answer(String path, Answer... sequence) {
         answers.put(path, new ConcurrentLinkedDeque<>(List.of(sequence)));
@@ -162,7 +179,7 @@ class HttpConsultationSummaryReaderTest {
 
         assertThat(summary).isEqualTo(new ConsultationSummary(SUMMARY, CONSULTATION, APPOINTMENT, PATIENT,
                 "Rinofaringitis aguda", "Reposo e hidratación",
-                List.of(new Medication("Acetaminofén", "500 mg", "cada 8 horas", "5 días"),
+                List.of(new Medication("Acetaminofén", "500 mg", "cada 8 horas", "5 días", "con alimentos"),
                         new Medication("Loratadina", null, null, null)),
                 "Estable", "Otorrinolaringología", Map.of("control", "15 días", "inDays", "15")));
         assertThat(received).extracting(Received::path).containsExactly(POST_PATH, ATTENTION_PATH);
