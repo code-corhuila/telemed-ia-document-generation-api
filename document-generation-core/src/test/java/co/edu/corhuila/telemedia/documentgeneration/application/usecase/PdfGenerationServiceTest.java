@@ -23,6 +23,8 @@ import co.edu.corhuila.telemedia.documentgeneration.application.port.out.Documen
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.DocumentStorage;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.GenerationMetrics;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfGeneratedEvent;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PatientDetails;
+import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PatientDetailsReader;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfRenderer;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.PdfRenderingException;
 import co.edu.corhuila.telemedia.documentgeneration.application.port.out.StorageUnavailableException;
@@ -52,8 +54,9 @@ class PdfGenerationServiceTest {
     private final StubRenderer renderer = new StubRenderer();
     private final RecordingStorage storage = new RecordingStorage();
     private final RecordingMetrics metrics = new RecordingMetrics();
+    private final StubDetails details = new StubDetails();
     private final PdfGenerationService service = new PdfGenerationService(repository, statusStore, reader,
-            renderer, storage, () -> EVENT, metrics, clock, Duration.ofSeconds(30));
+            details, renderer, storage, () -> EVENT, metrics, clock, Duration.ofSeconds(30));
 
     private ConsultationDocument pending() {
         ConsultationDocument document = ConsultationDocument.request(UUID.randomUUID(), SUMMARY, PATIENT, T0);
@@ -94,6 +97,30 @@ class PdfGenerationServiceTest {
                 .isEqualTo(new PdfGeneratedEvent(EVENT, document.id(), SUMMARY, APPOINTMENT, PATIENT, T0, TRACE));
         assertThat(renderer.rendered).isEqualTo(reader.summary);
         assertThat(reader.correlationId).isEqualTo(TRACE);
+    }
+
+    @Test
+    void thePdfShowsTheDetailsReadForItsSummary() {
+        ConsultationDocument document = pending();
+        reader.summary = summary(PATIENT);
+        details.answer = new PatientDetails("Laura Méndez", "Dra. Camila Rojas", "Nos contaste que...");
+
+        assertThat(service.generate(document.id(), TRACE)).isEqualTo(GenerationAttempt.AVAILABLE);
+
+        assertThat(details.asked).isEqualTo(reader.summary);
+        assertThat(details.correlationId).isEqualTo(TRACE);
+        assertThat(renderer.renderedDetails).isEqualTo(details.answer);
+    }
+
+    @Test
+    void detailsThatCannotBeReadNeverStopThePdf() {
+        ConsultationDocument document = pending();
+        reader.summary = summary(PATIENT);
+        details.failure = new IllegalStateException("identity is down");
+
+        assertThat(service.generate(document.id(), TRACE)).isEqualTo(GenerationAttempt.AVAILABLE);
+
+        assertThat(renderer.renderedDetails).isEqualTo(PatientDetails.NONE);
     }
 
     @Test
@@ -337,13 +364,35 @@ class PdfGenerationServiceTest {
         private ConsultationSummary rendered;
         private RuntimeException failure;
 
+        private PatientDetails renderedDetails;
+
         @Override
-        public byte[] render(ConsultationDocument document, ConsultationSummary summary, Instant issuedAt) {
+        public byte[] render(ConsultationDocument document, ConsultationSummary summary, PatientDetails details,
+                Instant issuedAt) {
             if (failure != null) {
                 throw failure;
             }
             rendered = summary;
+            renderedDetails = details;
             return PDF;
+        }
+    }
+
+    private static final class StubDetails implements PatientDetailsReader {
+
+        private PatientDetails answer = PatientDetails.NONE;
+        private RuntimeException failure;
+        private ConsultationSummary asked;
+        private String correlationId;
+
+        @Override
+        public PatientDetails read(ConsultationSummary summary, String correlationId) {
+            asked = summary;
+            this.correlationId = correlationId;
+            if (failure != null) {
+                throw failure;
+            }
+            return answer;
         }
     }
 
