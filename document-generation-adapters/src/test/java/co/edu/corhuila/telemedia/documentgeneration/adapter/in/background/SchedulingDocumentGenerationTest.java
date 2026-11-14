@@ -29,11 +29,24 @@ class SchedulingDocumentGenerationTest {
     private GenerationResult result;
     private RuntimeException failure;
 
-    private final DocumentGeneration delegate = (caller, command) -> {
-        if (failure != null) {
-            throw failure;
+    private final List<Caller> authorized = new ArrayList<>();
+
+    private final DocumentGeneration delegate = new DocumentGeneration() {
+        @Override
+        public void authorize(Caller caller) {
+            authorized.add(caller);
+            if (failure != null) {
+                throw failure;
+            }
         }
-        return result;
+
+        @Override
+        public GenerationResult request(Caller caller, GenerateDocumentCommand command) {
+            if (failure != null) {
+                throw failure;
+            }
+            return result;
+        }
     };
     private final SchedulingDocumentGeneration generation = new SchedulingDocumentGeneration(delegate,
             (documentId, correlationId) -> submitted.add(documentId + " " + correlationId), () -> "trace-1");
@@ -66,6 +79,17 @@ class SchedulingDocumentGenerationTest {
 
         generation.request(ADMIN, COMMAND);
 
+        assertThat(submitted).isEmpty();
+    }
+
+    @Test
+    void authorizationIsDelegatedAndQueuesNothing() {
+        generation.authorize(ADMIN);
+        failure = new DocumentAccessDeniedException();
+
+        assertThatThrownBy(() -> generation.authorize(ADMIN)).isSameAs(failure);
+
+        assertThat(authorized).containsExactly(ADMIN, ADMIN);
         assertThat(submitted).isEmpty();
     }
 

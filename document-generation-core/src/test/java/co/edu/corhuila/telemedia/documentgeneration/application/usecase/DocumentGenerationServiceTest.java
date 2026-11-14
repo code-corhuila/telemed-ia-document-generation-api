@@ -115,6 +115,21 @@ class DocumentGenerationServiceTest {
     }
 
     @Test
+    void authorizeAcceptsAdministratorsAndAllowedServicesOnly() {
+        DocumentGenerationService withWorker = new DocumentGenerationService(
+                store, UUID::randomUUID, Clock.fixed(NOW, ZoneOffset.UTC), Set.of("worker"));
+
+        withWorker.authorize(ADMIN);
+        withWorker.authorize(new Caller("worker", Set.of(Caller.SERVICE)));
+
+        assertThatThrownBy(() -> withWorker.authorize(new Caller(PATIENT.toString(), Set.of(Caller.PATIENT))))
+                .isInstanceOf(DocumentAccessDeniedException.class);
+        assertThatThrownBy(() -> withWorker.authorize(new Caller("notifications", Set.of(Caller.SERVICE))))
+                .isInstanceOf(DocumentAccessDeniedException.class);
+        assertThat(store.documentCount()).isZero();
+    }
+
+    @Test
     void onlyAnAdministratorCanRequestGeneration() {
         Caller patient = new Caller(PATIENT.toString(), Set.of(Caller.PATIENT));
 
