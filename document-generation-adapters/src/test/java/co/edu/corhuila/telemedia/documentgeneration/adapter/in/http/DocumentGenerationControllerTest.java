@@ -127,6 +127,32 @@ class DocumentGenerationControllerTest {
     }
 
     @Test
+    void aCallerWhoMayNotGenerateIs403BeforeTheRequestIsValidated() throws Exception {
+        generation.denied = true;
+
+        for (String json : new String[] {"{}", "[]", body("not-a-uuid", PATIENT)}) {
+            mockMvc.perform(post(ROUTE).header(HttpHeaders.AUTHORIZATION, bearer(PATIENT.toString(), "PATIENT"))
+                            .contentType(MediaType.APPLICATION_JSON).content(json))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.error").value("FORBIDDEN"))
+                    .andExpect(jsonPath("$.details").doesNotExist());
+        }
+
+        assertThat(generation.authorizations).isEqualTo(3);
+        assertThat(generation.calls).isZero();
+    }
+
+    @Test
+    void theCallerIsAuthorizedWithTheIdentityOfTheToken() throws Exception {
+        generation.result = new GenerationResult(document, true);
+
+        generate(KEY, body(SUMMARY, PATIENT)).andExpect(status().isCreated());
+
+        assertThat(generation.authorized.subject()).isEqualTo(ADMIN);
+        assertThat(generation.authorized.roles()).containsExactly("ADMIN");
+    }
+
+    @Test
     void aCallerThatIsNotAdministratorIs403() throws Exception {
         generation.failure = new DocumentAccessDeniedException();
 
@@ -227,6 +253,18 @@ class DocumentGenerationControllerTest {
         private Caller caller;
         private GenerateDocumentCommand command;
         private int calls;
+        private boolean denied;
+        private Caller authorized;
+        private int authorizations;
+
+        @Override
+        public void authorize(Caller caller) {
+            authorizations++;
+            this.authorized = caller;
+            if (denied) {
+                throw new DocumentAccessDeniedException();
+            }
+        }
 
         @Override
         public GenerationResult request(Caller caller, GenerateDocumentCommand command) {
