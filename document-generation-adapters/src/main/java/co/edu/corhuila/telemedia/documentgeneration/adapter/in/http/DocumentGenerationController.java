@@ -27,7 +27,8 @@ import co.edu.corhuila.telemedia.documentgeneration.application.port.in.Generati
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * POST /generate of document-service.yaml. The header and the body
+ * POST /generate of document-service.yaml. The caller is authorized first, so a caller who
+ * may not generate gets 403 whatever it sends. Then the header and the body
  * ({@code GenerateDocumentRequest}, {@code additionalProperties: false}) are validated
  * here and every invalid field is named in one 400. The body is read as a tree so the
  * contract does not depend on how the JSON mapper treats unknown properties.
@@ -53,6 +54,10 @@ public class DocumentGenerationController {
     public ResponseEntity<DocumentResponse> generate(HttpServletRequest request,
             @RequestHeader(name = IDEMPOTENCY_KEY, required = false) String idempotencyKey,
             @RequestBody JsonNode body) {
+        AuthenticatedUser user = AuthFilter.currentUser(request);
+        Caller caller = new Caller(user.subject(), user.roles());
+        generation.authorize(caller);
+
         List<FieldDetail> invalid = new ArrayList<>();
         validateKey(idempotencyKey, invalid);
         UUID summaryId = null;
@@ -68,8 +73,7 @@ public class DocumentGenerationController {
             throw new InvalidRequestException(invalid);
         }
 
-        AuthenticatedUser user = AuthFilter.currentUser(request);
-        GenerationResult result = generation.request(new Caller(user.subject(), user.roles()),
+        GenerationResult result = generation.request(caller,
                 new GenerateDocumentCommand(idempotencyKey, summaryId, patientId));
         DocumentResponse response = DocumentResponse.from(result.document());
         if (result.created()) {

@@ -28,6 +28,11 @@ public final class SchedulingDocumentGeneration implements DocumentGeneration {
     }
 
     @Override
+    public void authorize(Caller caller) {
+        delegate.authorize(caller);
+    }
+
+    @Override
     public GenerationResult request(Caller caller, GenerateDocumentCommand command) {
         GenerationResult result = delegate.request(caller, command);
         if (result.document().status() == DocumentStatus.PENDING) {

@@ -52,10 +52,15 @@ public final class DocumentGenerationService implements DocumentGeneration {
     }
 
     @Override
-    public GenerationResult request(Caller caller, GenerateDocumentCommand command) {
+    public void authorize(Caller caller) {
         if (!mayRequest(Objects.requireNonNull(caller, "caller"))) {
             throw new DocumentAccessDeniedException();
         }
+    }
+
+    @Override
+    public GenerationResult request(Caller caller, GenerateDocumentCommand command) {
+        authorize(caller);
         String hash = requestHash(command);
         ConsultationDocument candidate = ConsultationDocument.request(
                 ids.newId(), command.summaryId(), command.patientId(), clock.instant());
