@@ -1,4 +1,4 @@
-# Copy of telemed-ia-docs/07-api/contracts/openapi/_shared.yaml at 0856781.
+# Copy of telemed-ia-docs/07-api/contracts/openapi/_shared.yaml at e58fb65.
 # The contract lives in telemed-ia-docs; update this copy when it changes, never edit it here.
 openapi: 3.0.3
 
@@ -338,9 +338,9 @@ components:
       required:
         - id
         - conversationId
+        - appointmentId
         - patientId
         - consultationReason
-        - detailedSymptoms
         - createdAt
       properties:
         id:
@@ -351,10 +351,8 @@ components:
           description: Agent-owned conversation identifier
 
         appointmentId:
-          allOf:
-            - $ref: '#/components/schemas/Id'
-          nullable: true
-          description: External appointment identifier when the pre-consultation is associated with an appointment
+          $ref: '#/components/schemas/Id'
+          description: External Appointment Scheduling identifier; every pre-consultation belongs to one appointment
 
         patientId:
           $ref: '#/components/schemas/Id'
@@ -371,7 +369,8 @@ components:
 
         detailedSymptoms:
           type: string
-          description: Symptoms reported during the pre-consultation
+          nullable: true
+          description: Symptoms reported during the pre-consultation, when the patient described any
 
         relevantHistory:
           type: string
@@ -455,6 +454,15 @@ components:
           $ref: '#/components/schemas/Id'
           description: Medical Consultation attention summary identifier
 
+        professionalId:
+          $ref: '#/components/schemas/Id'
+          description: Professional of the consultation (consultation DEC-008)
+
+        completedAt:
+          type: string
+          format: date-time
+          description: When the consultation was completed, RFC 3339 UTC (consultation DEC-008)
+
         generatedAt:
           $ref: '#/components/schemas/Timestamp'
     Conversation:
@@ -462,30 +470,32 @@ components:
       required:
         - id
         - patientId
+        - appointmentId
+        - startDateTime
         - status
+        - questionLimit
+        - questionsAsked
+        - messages
       properties:
         id:
           $ref: '#/components/schemas/Id'
 
         patientId:
           $ref: '#/components/schemas/Id'
-          description: External Patient Management identifier
+          description: The patient, taken from the token's subject
 
         appointmentId:
-          allOf:
-            - $ref: '#/components/schemas/Id'
-          nullable: true
-          description: External Appointment Scheduling identifier when available
+          $ref: '#/components/schemas/Id'
+          description: External Appointment Scheduling identifier; one pre-consultation per appointment
 
         startDateTime:
-          allOf:
-            - $ref: '#/components/schemas/Timestamp'
-          nullable: true
+          $ref: '#/components/schemas/Timestamp'
 
         endDateTime:
           allOf:
             - $ref: '#/components/schemas/Timestamp'
           nullable: true
+          description: Null while the conversation is ACTIVE
 
         status:
           type: string
@@ -495,24 +505,32 @@ components:
 
         questionLimit:
           type: integer
-          minimum: 0
-          nullable: true
+          minimum: 1
 
         questionsAsked:
           type: integer
           minimum: 0
-          default: 0
 
         finalizationReason:
           type: string
+          enum:
+            - COMPLETED
+            - QUESTION_LIMIT_REACHED
           nullable: true
+          description: Null while the conversation is ACTIVE
 
         messages:
           type: array
+          description: The conversation's messages in order, starting with the agent's opening message
           items:
             $ref: '#/components/schemas/Message'
     Message:
       type: object
+      required:
+        - id
+        - sender
+        - content
+        - sentAt
       properties:
         id:
           $ref: '#/components/schemas/Id'
@@ -569,16 +587,6 @@ components:
               type: array
               items:
                 $ref: '#/components/schemas/Appointment'
-
-    PaginatedConversationResponse:
-      allOf:
-        - $ref: '#/components/schemas/PaginatedResponse'
-        - type: object
-          properties:
-            data:
-              type: array
-              items:
-                $ref: '#/components/schemas/Conversation'
   # -----
 
   parameters:
